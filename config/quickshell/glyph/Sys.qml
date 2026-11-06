@@ -57,7 +57,8 @@ Singleton {
     // ---- запись и авиарежим: их же включают бинды hypr, поэтому опрос. Ночник — общий с demonshot, в его rules.json
     // ponytail: pgrep раз в 3 с; станет заметно — следить за процессами через systemd-run --scope ----
     property bool rec: false
-    readonly property bool night: Rules.store.night
+    readonly property string nightMode: Rules.store.nightMode
+    readonly property bool night: nightMode !== "off"
     property bool air: false
     Process {
         id: poll
@@ -86,7 +87,10 @@ Singleton {
         sh(`pkill -INT -f '^gpu-screen-recorder' || exec gpu-screen-recorder ${w} ${recArgs()} -o "$(xdg-user-dir VIDEOS)/rec-$(date +%F_%H-%M-%S).mp4"`);
         rec = !rec;
     }
-    function toggleNight() { Rules.store.night = !night; Rules.night(); }
+    function toggleNight() {
+        Rules.store.nightMode = nightMode === "auto" ? "off" : nightMode === "off" ? "on" : "auto";
+        Rules.night();
+    }
     function toggleAir() { Quickshell.execDetached(["rfkill", air ? "unblock" : "block", "all"]); air = !air; }
     function toggleMic() { if (mic?.audio) mic.audio.muted = !mic.audio.muted; }
 

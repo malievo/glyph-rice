@@ -51,6 +51,7 @@ Singleton {
             property var outs: ({})
             property int brightness: 62
             property bool night: false
+            property string nightMode: "auto" // auto — расписание по солнцу (auto-night-light), on/off — ручной override
             property int warmth: 4300
             property int gapsIn: 6
             property int gapsOut: 14
@@ -281,8 +282,14 @@ Singleton {
                                        + 'printf %s "$2" > "$f"; pkill -x hypridle; exec hypridle -c "$f"', "sh", dir, conf]);
     }
     function brightness() { Quickshell.execDetached(["brightnessctl", "-q", "set", store.brightness + "%"]); }
+    // auto — ночником владеет служба auto-night-light, здесь не трогаем; on/off — ручной override через IPC,
+    // без перезапуска процесса (перезапуск давал вспышку и мешал плавному расписанию)
     function night() {
-        Quickshell.execDetached(["sh", "-c", store.night ? `pkill -x hyprsunset; exec hyprsunset -t ${store.warmth}` : "pkill -x hyprsunset"]);
+        if (store.nightMode === "auto") return;
+        if (store.nightMode === "on")
+            Quickshell.execDetached(["hyprctl", "hyprsunset", "temperature", String(store.warmth)]);
+        else
+            Quickshell.execDetached(["hyprctl", "hyprsunset", "identity"]);
     }
 
     // палитра: Theme перекрашивается сам (биндинги на pal), здесь — то, что живёт вне шелла

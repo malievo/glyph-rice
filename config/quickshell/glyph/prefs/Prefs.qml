@@ -1081,8 +1081,8 @@ PanelWindow {
             }
             Row {
                 spacing: 40
-                Toggle { anchors.verticalCenter: parent.verticalCenter; text: "night light"; on: Sys.night; onFlip: Sys.toggleNight() }
-                Dial { label: "warmth · k · all screens"; from: 2500; to: 6500; step: 100; value: root.r.warmth; onMoved: v => { root.r.warmth = v; if (root.r.night) Rules.night(); } }
+                Pick { anchors.verticalCenter: parent.verticalCenter; label: "night light"; opts: ["auto", "on", "off"]; cur: ["auto", "on", "off"].indexOf(root.r.nightMode); onPicked: i => { root.r.nightMode = ["auto", "on", "off"][i]; Rules.night(); } }
+                Dial { label: "warmth · k · all screens"; from: 2500; to: 6500; step: 100; value: root.r.warmth; onMoved: v => { root.r.warmth = v; if (root.r.nightMode === "on") Rules.night(); } }
             }
         }
 
