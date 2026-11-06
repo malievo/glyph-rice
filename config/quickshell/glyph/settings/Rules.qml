@@ -238,7 +238,7 @@ Singleton {
     readonly property var rates: mon.rates.length ? mon.rates : [60, 120]
     readonly property int refreshHz: store.refresh ? rates.reduce((a, b) => Math.abs(b - store.refresh) < Math.abs(a - store.refresh) ? b : a) : rates[rates.length - 1]
     readonly property real scale: store.monScale || mon.scale || 1 // что стоит на деле, и при auto
-    readonly property var scales: ["auto", "1", "1.25", "1.5", "2"]
+    readonly property var scales: ["auto", "1", "1.25", "1.5", "1.6", "2"]
     function windows() {
         const s = store;
         hypr(`hl.config({ general = { gaps_in = ${s.gapsIn}, gaps_out = ${s.gapsOut}, border_size = ${s.border} }, `
