@@ -54,7 +54,7 @@ PanelWindow {
     Stage {
         id: stage
         // раскладка под бар слева; бар сверху или снят с экрана — на его полширины влево, по центру
-        x: Theme.state.barAt === "top" || !Theme.scr(root.screen?.name, "bar") ? -39 * Theme.s : 0
+        x: Theme.state.barAt === "top" || !Theme.scr(root.screen?.name, "bar") ? -(Theme.barSpan / 2) * Theme.s : 0
 
         Row {
             x: 182

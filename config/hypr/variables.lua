@@ -21,7 +21,7 @@ return {
 
     -- Apps
     terminal                   = "kitty", -- не -1: общий процесс, сломав GL после сна (AMD и Intel), белил все новые окна до перезагрузки (#12); цена — ~230 мс вместо ~20
-    browser                    = "zen-browser",
+    browser                    = "firefox",
     fileExplorer               = "thunar",
     audioSettings              = "pavucontrol",
     -- программы спец-воркспейсов (запускаются, если там пусто) и редактор. Бинды читают их при нажатии,

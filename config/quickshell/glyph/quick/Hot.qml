@@ -3,8 +3,7 @@ import Quickshell
 import Quickshell.Wayland
 import qs
 
-// горячий край: курсор задержался у правого края — быстрые настройки выезжают (Quick.peek). Полоска 2px по нижним 80%:
-// верхний угол и полосы прокрутки у края почти не задевает
+// горячий угол: курсор задержался в нижних правых 10% экрана — быстрые настройки выезжают (Quick.peek)
 PanelWindow {
     id: root
 
@@ -12,8 +11,8 @@ PanelWindow {
 
     visible: Theme.state.quickHover
     anchors { right: true; bottom: true }
-    implicitWidth: 2
-    implicitHeight: Math.round(screen.height * 0.8)
+    implicitWidth: Math.round(screen.width * 0.1)
+    implicitHeight: 2
     exclusionMode: ExclusionMode.Ignore
     color: "transparent"
     WlrLayershell.layer: WlrLayer.Overlay

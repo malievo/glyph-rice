@@ -28,7 +28,7 @@ end
 hl.bind(vars.kbAltar, hl.dsp.global("shell:altar"))
 hl.bind("SUPER + I", hl.dsp.global("shell:settings"))
 hl.bind("SUPER + N", hl.dsp.global("shell:ward"))
-hl.bind("SUPER + P", hl.dsp.global("shell:pact"))
+hl.bind("SUPER + P", hl.dsp.global("shell:happ")) -- vpn-панель для Happ
 hl.bind("SUPER + A", hl.dsp.global("shell:quick")) -- быстрые настройки glyph
 hl.bind("SUPER + SHIFT + W", hl.dsp.global("shell:wall")) -- обои glyph
 hl.bind(vars.kbSession, hl.dsp.global("shell:power"))

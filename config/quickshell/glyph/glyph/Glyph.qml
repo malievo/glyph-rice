@@ -104,7 +104,7 @@ Scope {
         id: top
         shown: !!root.note && Theme.state.edges
         anchors.top: true
-        margins.top: root.underBar ? Math.ceil(78 * Theme.s) : 0
+        margins.top: root.underBar ? Math.ceil(Theme.barSpan * Theme.s) : 0
         implicitWidth: Math.ceil(640 * Theme.s)
         implicitHeight: Math.ceil(30 * Theme.s)
         Seg {
@@ -133,7 +133,7 @@ Scope {
     PanelWindow {
         visible: stack.count > 0
         anchors.top: true
-        margins.top: root.underBar ? Math.ceil(78 * Theme.s) : 0
+        margins.top: root.underBar ? Math.ceil(Theme.barSpan * Theme.s) : 0
         implicitWidth: Math.ceil(600 * Theme.s)
         implicitHeight: Math.ceil((24 + root.most * 132) * Theme.s)
         exclusionMode: ExclusionMode.Ignore

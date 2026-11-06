@@ -43,6 +43,7 @@ ShellRoot {
     Deck { id: deck }
     Shot { id: shot }
     Vpn { id: vpn; wifiNetwork: quick.net }
+    Happ { id: happ }
     Walls { id: walls }
 
     Variants {
@@ -62,6 +63,7 @@ ShellRoot {
                 onTrayClicked: quick.toggle()
                 onPowerClicked: power.visible ? power.close() : power.open()
                 onClockClicked: cal.toggle()
+                onVpnClicked: happ.toggle()
             }
         }
     }
@@ -137,6 +139,17 @@ ShellRoot {
     }
     Shortcut { name: "launcherArm"; description: "Super pressed — reset interrupt"; onPressed: shell.interrupted = false }
     Shortcut { name: "launcherInterrupt"; description: "Super+<key> — don't open the launcher"; onPressed: shell.interrupted = true }
+    // Super+Space — лаунчер (рис вешал сюда deck)
+    Shortcut { name: "apps"; description: "launcher (Super+Space)"; onPressed: launcher.toggle() }
+    // тап Super — deck: тот же interrupt, что у лаунчера, иначе deck открывался бы после любого Super+<key>
+    Shortcut {
+        name: "deck"
+        description: "deck: dashboard (tap Super)"
+        onReleased: {
+            if (!shell.interrupted) deck.toggle();
+            shell.interrupted = false;
+        }
+    }
     // Super+Space (алтарь у demonshot) — deck, дашборд снизу: лаунчер и так на тапе Super
     Shortcut { name: "altar"; description: "deck: bottom dashboard"; onPressed: deck.toggle() }
     Shortcut { name: "quick"; description: "quick settings"; onPressed: quick.toggle() }
@@ -144,7 +157,7 @@ ShellRoot {
     Shortcut { name: "settings"; description: "settings"; onPressed: prefs.toggle() }
     Shortcut { name: "power"; description: "power menu"; onPressed: power.visible ? power.close() : power.open() }
     Shortcut { name: "shot"; description: "screenshot"; onPressed: shot.open() }
-    Shortcut { name: "pact"; description: "vpn: clash verge"; onPressed: vpn.toggle() }
+    Shortcut { name: "happ"; description: "vpn: happ"; onPressed: happ.toggle() }
     Shortcut { name: "clip"; description: "clipboard"; onPressed: clip.toggle() }
     Shortcut { name: "charms"; description: "emoji, kaomoji, symbols"; onPressed: charms.toggle() }
     Shortcut { name: "wall"; description: "wallpapers"; onPressed: walls.toggle() }

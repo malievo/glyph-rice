@@ -44,3 +44,9 @@ if status is-interactive
         echo -en "\e]133;A\e\\"
     end
 end
+set -gx PATH ~/.npm-global/bin $PATH
+
+
+# QODER_DISPATCHER_PATH v1
+fish_add_path -p -m $HOME/.qoder/entry
+# END QODER_DISPATCHER_PATH v1

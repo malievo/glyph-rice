@@ -43,8 +43,8 @@ PanelWindow {
     Stage {
         Rectangle {
             id: panel
-            // внутренний край пилюли бара (14 + 64) и зазор 14, выезжает от бара; поперёк — по центру, где часы
-            readonly property real off: 92 - 24 * (1 - root.t)
+            // внутренний край пилюли (зазор + толщина) и ещё зазор, выезжает от бара; поперёк — по центру, где часы
+            readonly property real off: Theme.barSpan + Theme.state.barGap - 24 * (1 - root.t)
             readonly property bool onTop: Theme.state.barAt === "top"
             x: onTop ? (parent.width - width) / 2 : off
             y: onTop ? off : (parent.height - height) / 2

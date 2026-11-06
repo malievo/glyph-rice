@@ -59,7 +59,7 @@ Singleton {
             property bool blur: true
             property bool shadow: true
             property bool motion: true
-            property bool ultra: false   // режим ultra (setMode 0): 60 Гц и без украшений поверх настроек
+            property bool ultra: false   // режим ultra (setMode 0): без украшений поверх настроек (частоту не трогает)
             property bool game: false    // игровой, как в caelestia: без анимаций, blur, теней, зазоров и скруглений, tearing (Theme.apply)
             // Colors
             property int palette: 0
@@ -274,7 +274,7 @@ Singleton {
         const at = (min, on, back) => min ? `\nlistener {\n    timeout = ${min * 60}\n    on-timeout = ${on}${back ? `\n    on-resume = ${back}` : ""}\n}\n` : "";
         const conf = "# demonshot: written by Rules.idle() from rules.json, do not edit by hand\n"
             + "general {\n    lock_cmd = ~/.config/quickshell/rice/rice lock\n    inhibit_sleep = 3\n"
-            + `    before_sleep_cmd = loginctl lock-session\n    after_sleep_cmd = ${dpms("on")}\n}\n`
+            + `    before_sleep_cmd = loginctl lock-session\n    after_sleep_cmd = ${dpms("on")}; ~/.local/bin/relock-after-sleep\n}\n`
             + at(s.lockAfter, "loginctl lock-session") + at(s.dpmsAfter, dpms("off"), dpms("on"))
             + at(s.sleepAfter, hibernateOn ? "systemctl suspend-then-hibernate" : "systemctl suspend");
         Quickshell.execDetached(["sh", "-c", 'f="$1/hypridle.conf"; printf %s "$2" | cmp -s - "$f" && pgrep -x hypridle >/dev/null && exit; '
@@ -305,11 +305,13 @@ Singleton {
         }
     }
 
-    // режимы питания, как в caelestia: профиль power-profiles-daemon. ultra сверху — 60 Гц, без анимаций, blur и теней,
-    // поверх своих настроек, не трогая их: вышел — вернулись. 0 ultra · 1 saver · 2 balanced · 3 performance.
+    // режимы питания, как в caelestia: профиль power-profiles-daemon. ultra сверху — без анимаций, blur и теней,
+    // поверх своих настроек, не трогая их: вышел — вернулись. Частоту режимы не трогают: смена герц — это перенастройка
+    // вывода, и монитор на ней гаснет примерно на секунду (re-training линка), а на настольном ПК экономить нечего.
+    // 0 ultra · 1 saver · 2 balanced · 3 performance.
     // Окна (blur, тени) применяет вызвавший: demonshot — windows(), glyph — Theme.apply() (windows() снял бы его скругление)
     readonly property var modes: [
-        { name: "ultra", short: "ULT", what: `power saver · ${rates[0]} hz · still` },
+        { name: "ultra", short: "ULT", what: "power saver · still" },
         { name: "saver", short: "ECO", what: "power saver" },
         { name: "balanced", short: "BAL", what: "balanced" },
         { name: "performance", short: "MAX", what: "performance" }
@@ -318,19 +320,14 @@ Singleton {
     readonly property int modeCount: PowerProfiles.hasPerformanceProfile ? 4 : 3
     function setMode(i) {
         i = Math.max(0, Math.min(modeCount - 1, i));
-        const hz0 = hz, moving0 = moving;
+        const moving0 = moving;
         store.ultra = i === 0;
         PowerProfiles.profile = i === 0 ? PowerProfile.PowerSaver : i - 1;
-        // монитор — только встроенный и если герцы правда другие: перенастройка вывода мигает экраном и сбрасывает наведение
-        // (панели гаснут)
-        if (hz !== hz0 && mon.name) {
-            hypr(rule(mon));
-            monReread.restart();
-        }
+        // вывод не перенастраиваем: частота от режима не зависит, а перенастройка гасит монитор на секунду
         if (moving !== moving0) motion();
     }
-    // что стоит на деле: ultra перекрывает настройки — самые низкие герцы экрана, иначе ближайшие к выбранным
-    readonly property int hz: store.ultra ? rates[0] : refreshHz
+    // что стоит на деле: ближайшие к выбранным герцы экрана; режимы питания их больше не перекрывают
+    readonly property int hz: refreshHz
     readonly property bool moving: store.motion && !store.ultra && !store.game
     readonly property bool blurOn: store.blur && !store.ultra && !store.game
     readonly property bool shadowOn: store.shadow && !store.ultra && !store.game

@@ -151,6 +151,9 @@ Singleton {
     function fade(c, a) { return Qt.rgba(c.r, c.g, c.b, a); }
     // радиус угла панели, плитки, пилюли — по настройке corners (prefs → WINDOWS → panels): 0 прямые, 100 как задумано
     function corner(px) { return px * st.corners / 100; }
+    // бар: толщина пилюли и зазор от края экрана. От них считают Bar, Cal, Glyph, Home и макеты в Prefs
+    readonly property int barThick: Math.round(64 * st.barSize / 100)
+    readonly property int barSpan: st.barGap + barThick // от края экрана до внутреннего края пилюли
     // часы по настройке 12/24: «09» или «9»
     function hh(d) { const h = d.getHours(); return st.clock24 ? String(h).padStart(2, "0") : String(h % 12 || 12); }
     function hex(c) { return c.toString().slice(1, 7).toUpperCase(); }
@@ -204,6 +207,8 @@ Singleton {
             property var bar: ["layout", "wifi", "bluetooth", "sound", "notes", "battery", "mode", "power"] // трей бара сверху вниз, см. bars
             property bool barTitle: true   // заголовок окна столбиком в баре
             property string barAt: "left" // left или top; за баром едут календарь, карточка батареи, дом, остров и вспышка Glyph
+            property int barSize: 100     // толщина пилюли бара, % от 64 (75 — минимум, где иконки ещё влезают)
+            property int barGap: 14       // зазор от края экрана, px макета
             // свои у монитора, по модели (Theme.sid): { "TS2700-S6-1": { bar: false, home: false, wall: "…", widgets: […] } }; нет — общие (Theme.scr)
             property var screens: ({})
             // запись (quick/Rec, Sys.recArgs)
@@ -222,7 +227,7 @@ Singleton {
     // секции deck
     readonly property var decks: ["clock", "weather", "perf", "net", "media"]
     // трей бара
-    readonly property var bars: ["layout", "wifi", "bluetooth", "sound", "notes", "battery", "mode", "power", "cat"]
+    readonly property var bars: ["layout", "wifi", "bluetooth", "sound", "notes", "battery", "mode", "power", "cat", "vpn"]
 
     // ---- вид всего, что вне шелла. Зовёт только shell.qml: на старте, при смене темы и цвета ----
     // hypr наследует demonshot: монитор, ввод, простой, ночник и движение ставит его же Rules (shell.qml), анимации — из

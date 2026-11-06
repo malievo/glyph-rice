@@ -24,6 +24,8 @@
         { "type": "terminal", "key": "TERM      ", "format": "{pretty-name}" },
         { "type": "terminalfont", "key": "FONT      " },
         { "type": "uptime", "key": "UPTIME    " },
+        { "type": "command", "key": "OS LIFE   ", "text": "d=$(( ( $(date +%s) - $(stat -c %W /) ) / 86400 )); echo \"$d days (с $(stat -c %w / | cut -d' ' -f1))\"" },
+        { "type": "command", "key": "ON LINUX  ", "text": "d=$(( ( $(date +%s) - $(date -d '2026-10-02' +%s) ) / 86400 )); echo \"$d days (с 02.10.2026)\"" },
         { "type": "memory", "key": "MEMORY    " },
         "break",
         { "type": "colors", "symbol": "circle" },

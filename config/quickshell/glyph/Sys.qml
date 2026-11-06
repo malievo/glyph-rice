@@ -6,12 +6,11 @@ import Quickshell.Bluetooth
 import Quickshell.Hyprland
 import Quickshell.Io
 import Quickshell.Services.Pipewire
-import Quickshell.Services.SystemTray
 import Quickshell.Wayland
 import qs.services
 import qs.settings
 
-// то, что трогают бар, быстрые настройки, Glyph и лок: звук, яркость, раскладка, запись, ночник, авиарежим, кофеин, vpn
+// то, что трогают бар, быстрые настройки, Glyph и лок: звук, яркость, раскладка, запись, ночник, авиарежим, кофеин
 Singleton {
     id: root
 
@@ -162,30 +161,4 @@ Singleton {
         }
     }
 
-    // ---- vpn: clash verge через пункты его трея, как договор в demonshot.
-    // ponytail: подписи английские (language: en в verge); другой язык — поменять строки ----
-    readonly property var verge: SystemTray.items.values.find(i => i.title === "clash-verge" || i.id.includes("clash-verge")) ?? null
-    QsMenuOpener { id: vmenu; menu: root.verge?.menu ?? null }
-    readonly property var vpnItems: ["System Proxy", "TUN Mode"]
-    function vpnItem(l) { return vmenu.children.values.find(e => e.text.startsWith(l)) ?? null; }
-    readonly property bool vpn: vpnItems.some(l => vpnItem(l)?.checkState === Qt.Checked)
-    property var queue: []
-    function toggleVpn() {
-        if (!verge) return Quickshell.execDetached(["clash-verge"]); // спит — разбудить
-        queue = vpn ? vpnItems.filter(l => vpnItem(l)?.checkState === Qt.Checked) : vpnItems;
-        presser.start();
-    }
-    // verge пересобирает меню после каждого нажатия — по одному
-    Timer {
-        id: presser
-        interval: 350
-        repeat: true
-        triggeredOnStart: true
-        onTriggered: {
-            const [l, ...rest] = root.queue;
-            root.queue = rest;
-            if (l) root.vpnItem(l)?.triggered();
-            if (!rest.length) stop();
-        }
-    }
 }

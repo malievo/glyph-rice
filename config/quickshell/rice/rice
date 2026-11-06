@@ -75,7 +75,7 @@ stop() {
 case $1 in
     "") echo "$cur" ;;
     list) for f in "$q"/*/rice.json; do basename "$(dirname "$f")"; done ;;
-    start) [ -n "$(pids "$cur")" ] && exit 0; mkdir -p "$state"; term "$cur"; exec qs -p "$q/$cur" -d ;;
+    start) [ -n "$(pids "$cur")" ] && exit 0; mkdir -p "$state"; term "$cur"; export DEMONSHOT_LATLON="55.758742,37.820825"; exec qs -p "$q/$cur" -d ;;
     restart) term "$cur"; stop "$cur"; hyprctl reload >/dev/null; exec qs -p "$q/$cur" -d ;; # reload снимает и залипшую плашку ошибок hypr
     kill) stop "$cur" ;;
     switch)

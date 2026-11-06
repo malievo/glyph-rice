@@ -22,11 +22,12 @@ PanelWindow {
     signal trayClicked
     signal powerClicked
     signal clockClicked
+    signal vpnClicked
 
     readonly property bool vert: Theme.state.barAt !== "top" // всё, кроме top (и неизвестное), — слева
     anchors { left: true; right: !vert; top: true; bottom: vert }
-    implicitWidth: Math.ceil(78 * Theme.s)  // сбоку
-    implicitHeight: Math.ceil(78 * Theme.s) // сверху
+    implicitWidth: Math.ceil(Theme.barSpan * Theme.s)  // сбоку: зазор + пилюля
+    implicitHeight: Math.ceil(Theme.barSpan * Theme.s) // сверху
     color: "transparent"
     WlrLayershell.namespace: "glyph-bar"
 
@@ -45,11 +46,11 @@ PanelWindow {
     Stage {
         Rectangle {
             id: pill
-            x: 14 // от краёв экрана
-            y: 14
-            width: root.vert ? 64 : parent.width - 28
-            height: root.vert ? parent.height - 28 : 64
-            radius: Theme.corner(32)
+            x: Theme.state.barGap // от краёв экрана
+            y: Theme.state.barGap
+            width: root.vert ? Theme.barThick : parent.width - 2 * Theme.state.barGap
+            height: root.vert ? parent.height - 2 * Theme.state.barGap : Theme.barThick
+            radius: Theme.corner(Theme.barThick / 2)
             color: Theme.s1
             border { width: 1; color: Theme.s2 }
 
@@ -150,17 +151,19 @@ PanelWindow {
                     Loader {
                         id: part
                         required property string modelData
-                        readonly property bool quick: modelData !== "mode" && modelData !== "power"
+                        readonly property bool quick: modelData !== "mode" && modelData !== "power" && modelData !== "vpn"
                         sourceComponent: root.parts[modelData] ?? null
                         visible: !!sourceComponent && (modelData !== "battery" || root.bat.isLaptopBattery)
                         TapHandler { enabled: part.quick; onTapped: root.trayClicked() }
                         HoverHandler { enabled: part.quick; cursorShape: Qt.PointingHandCursor }
+                        TapHandler { enabled: modelData === "vpn"; onTapped: root.vpnClicked() }
+                        HoverHandler { enabled: modelData === "vpn"; cursorShape: Qt.PointingHandCursor }
                     }
                 }
             }
         }
     }
-    readonly property var parts: ({ layout: layoutC, wifi: wifiC, bluetooth: btC, sound: soundC, notes: notesC, battery: batC, mode: modeC, power: powerC, cat: catC })
+    readonly property var parts: ({ layout: layoutC, wifi: wifiC, bluetooth: btC, sound: soundC, notes: notesC, battery: batC, mode: modeC, power: powerC, cat: catC, vpn: vpnC })
     Component { id: layoutC; Lb { text: Sys.layout; px: 10 } }
     // кот RunCat: чем больше cpu, тем быстрее бежит (250 мс на кадр в простое, 50 на полной). cpu опрашивается, пока он в трее;
     // Binding не в делегате — уничтоженный значение не возвращает. Серый как есть, в светлой теме на белом теряется — чёрный, как buds
@@ -200,6 +203,16 @@ PanelWindow {
                 strokeWidth: -1; fillColor: wf.ink
                 PathAngleArc { centerX: 10; centerY: 15; radiusX: 1.9; radiusY: 1.9; startAngle: 0; sweepAngle: 360 }
             }
+        }
+    }
+    // vpn (Happ): щит с галочкой и код страны сервера, как заряд у батареи; выключен — пустой серый щит без подписи. Клик — панель (vpn/Happ)
+    Component {
+        id: vpnC
+        Pile {
+            spacing: 4
+            Icon { text: HappState.live ? "\u{F0565}" : "\u{F0499}"; color: HappState.live ? Theme.fg : Theme.grey }
+            Lb { visible: HappState.live; width: full2.implicitWidth; horizontalAlignment: Text.AlignHCenter; text: HappState.cc; px: 10; color: Theme.fg }
+            Lb { id: full2; visible: false; text: "MM"; px: 10 }
         }
     }
     Component {
@@ -323,9 +336,9 @@ PanelWindow {
         property real t: root.powOpen ? 1 : 0
         Behavior on t { NumberAnimation { duration: Theme.t; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.glide } }
         visible: t > 0
-        // от внутреннего края пилюли бара с зазором 14; сбоку растёт вверх от popAt, сверху — вниз и влево
+        // от внутреннего края пилюли бара с тем же зазором; сбоку растёт вверх от popAt, сверху — вниз и влево
         anchor.item: pill
-        anchor.rect: root.vert ? Qt.rect(pill.width + 14, root.popAt.y, 1, 1) : Qt.rect(root.popAt.x, pill.height + 14, 1, 1)
+        anchor.rect: root.vert ? Qt.rect(pill.width + Theme.state.barGap, root.popAt.y, 1, 1) : Qt.rect(root.popAt.x, pill.height + Theme.state.barGap, 1, 1)
         anchor.edges: Edges.Top | Edges.Left
         anchor.gravity: root.vert ? Edges.Top | Edges.Right : Edges.Bottom | Edges.Left
         implicitWidth: Math.ceil(440 * Theme.s)
@@ -410,7 +423,7 @@ PanelWindow {
                         readonly property int i: root.powPeek >= 0 ? root.powPeek : Rules.mode
                         width: parent.width
                         elide: Text.ElideRight
-                        text: `${Rules.modes[i].what} · ${i === 0 ? Rules.rates[0] : Rules.refreshHz} hz`
+                        text: `${Rules.modes[i].what} · ${Rules.refreshHz} hz`
                     }
                 }
             }

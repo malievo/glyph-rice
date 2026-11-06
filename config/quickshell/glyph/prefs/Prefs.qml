@@ -32,7 +32,7 @@ PanelWindow {
         battery: "\u{F0079}", buds: "\u{F02CB}", player: "\u{F040A}", system: "\u{F0128}", cat: "\u{F011B}", cava: "\u{F0EA2}",
         clock: "\u{F0150}", perf: "\u{F04C5}", net: "\u{F05A9}", media: "\u{F075A}",
         layout: "\u{F030C}", wifi: "\u{F05A9}", bluetooth: "\u{F00AF}", sound: "\u{F057E}", notes: "\u{F009A}",
-        mode: "\u{F04C5}", power: "\u{F0425}"
+        mode: "\u{F04C5}", power: "\u{F0425}", vpn: "\u{F0565}"
     })
     // круглые виджеты дома, остальные — квадрат 40. ponytail: ram/gpu/disk/battery — догадка (кольца); решит Home — поправить
     readonly property var rounds: ["weather", "cpu", "ram", "gpu", "disk", "battery", "buds", "cava"]
@@ -504,7 +504,7 @@ PanelWindow {
         Page {
             id: bar
             k: 2
-            caption: `bar · ${Theme.state.bar.length} of ${Theme.bars.length} in the tray · ${onTop ? "top" : "left"} edge`
+            caption: `bar · ${Theme.state.bar.length} of ${Theme.bars.length} in the tray · ${onTop ? "top" : "left"} edge · ${Theme.state.barSize} %`
             readonly property bool onTop: Theme.state.barAt === "top"
             readonly property real step: onTop ? 104 : 68 // слот вдоль бара
             property int cur: 0
@@ -653,6 +653,12 @@ PanelWindow {
                     }
                     Item { width: 1; height: 12 }
                     Toggle { width: 200; text: "window title"; on: Theme.state.barTitle; onFlip: Theme.state.barTitle = !Theme.state.barTitle }
+                    Row {
+                        spacing: 40
+                        // 75 % — минимум, где иконки ещё влезают (самый широкий — кот, 44 из 48)
+                        Dial { label: "thickness · %"; from: 75; to: 110; step: 5; value: Theme.state.barSize; onMoved: v => Theme.state.barSize = v }
+                        Dial { label: "edge gap · px"; from: 4; to: 24; value: Theme.state.barGap; onMoved: v => Theme.state.barGap = v }
+                    }
                     Lb { topPadding: 6; text: bar.onTop ? "left of the clock" : "above the clock"; px: 10 }
                 }
             }
@@ -888,7 +894,7 @@ PanelWindow {
                             id: wnd
                             required property int index
                             readonly property real o: gOut.v * desk.k
-                            readonly property real l: 78 * Theme.s * desk.k + o // бар 64 + отступ 14, в логических px
+                            readonly property real l: Theme.barSpan * Theme.s * desk.k + o // бар: зазор + толщина, в логических px
                             readonly property real w: (desk.width - (at === "top" ? o : l) - o - 2 * gIn.v * desk.k) / 2
                             readonly property string at: Theme.state.barAt
                             x: (at !== "top" ? l : o) + (index ? w + 2 * gIn.v * desk.k : 0)
@@ -1088,7 +1094,7 @@ PanelWindow {
         }
 
         // ---- POWER: режимы питания (Rules.modes) — четыре круга, кольцо горит по силе, выбранный белый.
-        // ultra — power saver и ещё 60 Гц, без анимаций, blur и теней поверх настроек ----
+        // ultra — power saver, без анимаций, blur и теней поверх настроек (частоту не меняет: смена герц гасит монитор) ----
         Page {
             k: 8
             caption: `power · ${Rules.modes[Rules.mode].what} · ${Rules.hz} hz`
@@ -1126,7 +1132,7 @@ PanelWindow {
                     }
                 }
             }
-            Lb { text: Rules.store.ultra ? `ultra · ${Rules.rates[0]} hz, no motion, no blur, no shadows — your settings come back when you leave` : "cpu profile only · hz, motion and looks stay yours" }
+            Lb { text: Rules.store.ultra ? "ultra · no motion, no blur, no shadows — your settings come back when you leave" : "cpu profile only · hz, motion and looks stay yours" }
             Lb { visible: !PowerProfiles.hasPerformanceProfile; text: "no performance profile on this machine" }
         }
 
@@ -1312,14 +1318,14 @@ PanelWindow {
             fillMode: Image.Tile
             source: "data:image/svg+xml," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><circle cx="8" cy="8" r="1" fill="#${Theme.hex(Theme.s2)}"/></svg>`)
         }
-        // бар у своего края: отступ 14 и толщина 64 — px макета, на экране они Theme.s логических
+        // бар у своего края: зазор и толщина из Theme.state — px макета, на экране они Theme.s логических
         Rectangle {
             readonly property real u: Theme.s * parent.k
             readonly property bool onTop: Theme.state.barAt === "top"
-            x: 14 * u
-            y: 14 * u
-            width: onTop ? parent.width - 28 * u : 64 * u
-            height: onTop ? 64 * u : parent.height - 28 * u
+            x: Theme.state.barGap * u
+            y: Theme.state.barGap * u
+            width: onTop ? parent.width - 2 * Theme.state.barGap * u : Theme.barThick * u
+            height: onTop ? Theme.barThick * u : parent.height - 2 * Theme.state.barGap * u
             radius: Theme.corner(Math.min(width, height) / 2)
             color: Theme.s1
             border { width: 1; color: Theme.s2 }

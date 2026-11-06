@@ -117,6 +117,12 @@ hl.window_rule({ match = { initial_title = "Spotify( \\(?Free\\)?)?" }, workspac
 hl.window_rule({ match = { class = "discord|equibop|vesktop|whatsapp|org\\.telegram\\.desktop|TelegramDesktop" }, workspace = "special:communication" })
 hl.window_rule({ match = { class = "Todoist|io\\.github\\.alainm23\\.planify" }, workspace = "special:todo" })
 
+-- Special workspaces: в общем layout "scrolling" новое окно (проводник) становилось колонкой по центру,
+-- а музыка/телеграм уезжали за край и казались свёрнутыми. Здесь окна делят экран поровну (dwindle).
+for _, name in ipairs({ "music", "communication", "todo", "sysmon" }) do
+    hl.workspace_rule({ workspace = "special:" .. name, layout = "dwindle" })
+end
+
 ---------------------
 ---- Layer rules ----
 ---------------------

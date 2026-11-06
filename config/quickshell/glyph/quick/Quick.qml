@@ -219,7 +219,7 @@ PanelWindow {
                         Tile { icon: "\u{F0176}"; name: "caffeine"; on: Sys.caffeine; onClicked: Sys.caffeine = !Sys.caffeine }
                         Tile { icon: on ? "\u{F036C}" : "\u{F036D}"; name: "mic"; on: Sys.micOn; onClicked: Sys.toggleMic() }
                         Tile { icon: "\u{F044A}"; name: "record"; on: Sys.rec; picked: root.pick === "rec"; onClicked: { root.close(); Sys.toggleRec(); } onMenu: root.pick = picked ? "" : "rec" }
-                        Tile { icon: "\u{F0483}"; name: "vpn"; on: Sys.vpn; onClicked: Sys.toggleVpn() }
+                        Tile { icon: "\u{F0483}"; name: "vpn"; on: HappState.live; onClicked: HappState.flip() }
                         Tile { icon: "\u{F050E}"; name: "dark"; on: !Theme.light; onClicked: Theme.setLight(!Theme.light) }
                     }
 
@@ -473,7 +473,7 @@ PanelWindow {
             rotation: pill.picked ? 180 : 0
             Behavior on rotation { NumberAnimation { duration: Theme.t; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.glide } }
         }
-        TapHandler { onTapped: { root.pin(); pill.clicked(); } }
+        TapHandler { onTapped: pill.clicked() }
         TapHandler { acceptedButtons: Qt.RightButton; onTapped: { root.pin(); pill.menu(); } }
     }
     // круглая плитка 68: вкл — белый круг. Правый клик — menu (у record — настройки записи), открыто — подпись белая
@@ -495,7 +495,7 @@ PanelWindow {
             color: tile.on ? Theme.fg : Theme.s2
             Behavior on color { ColorAnimation { duration: Theme.t } }
             Icon { anchors.centerIn: parent; text: tile.icon; font.pixelSize: 24; color: tile.on ? Theme.ink : Theme.fg }
-            TapHandler { onTapped: { root.pin(); tile.clicked(); } }
+            TapHandler { onTapped: tile.clicked() }
             TapHandler { acceptedButtons: Qt.RightButton; onTapped: { root.pin(); tile.menu(); } }
         }
         Lb { anchors.horizontalCenter: parent.horizontalCenter; text: tile.name; px: 10; color: tile.picked ? Theme.fg : Theme.grey }

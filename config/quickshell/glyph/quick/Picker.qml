@@ -20,7 +20,7 @@ Rectangle {
     readonly property var wifi: Networking.devices.values.find(d => d.type === DeviceType.Wifi) ?? null
     readonly property var bt: Bluetooth.defaultAdapter
     readonly property bool on: isWifi ? Networking.wifiEnabled : bt?.enabled ?? false
-    // сеть со страницей входа: сам портал (и снятие vpn) открывает Vpn, здесь — открыть его снова, если вкладку закрыли
+    // сеть со страницей входа: сам портал открывал Vpn (удалён), здесь — открыть его снова, если вкладку закрыли
     readonly property bool portal: Networking.connectivity === NetworkConnectivity.Portal
 
     property var ask: null // сеть, которой нужен пароль
