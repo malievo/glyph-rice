@@ -44,7 +44,7 @@ PanelWindow {
         Rectangle {
             id: panel
             // внутренний край пилюли (зазор + толщина) и ещё зазор, выезжает от бара; поперёк — по центру, где часы
-            readonly property real off: Theme.barSpan + Theme.state.barGap - 24 * (1 - root.t)
+            readonly property real off: Theme.barSpan + Theme.barGap - 24 * (1 - root.t)
             readonly property bool onTop: Theme.state.barAt === "top"
             x: onTop ? (parent.width - width) / 2 : off
             y: onTop ? off : (parent.height - height) / 2

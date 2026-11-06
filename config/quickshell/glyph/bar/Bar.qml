@@ -46,10 +46,10 @@ PanelWindow {
     Stage {
         Rectangle {
             id: pill
-            x: Theme.state.barGap // от краёв экрана
-            y: Theme.state.barGap
-            width: root.vert ? Theme.barThick : parent.width - 2 * Theme.state.barGap
-            height: root.vert ? parent.height - 2 * Theme.state.barGap : Theme.barThick
+            x: Theme.barGap // от краёв экрана
+            y: Theme.barGap
+            width: root.vert ? Theme.barThick : parent.width - 2 * Theme.barGap
+            height: root.vert ? parent.height - 2 * Theme.barGap : Theme.barThick
             radius: Theme.corner(Theme.barThick / 2)
             color: Theme.s1
             border { width: 1; color: Theme.s2 }
@@ -338,7 +338,7 @@ PanelWindow {
         visible: t > 0
         // от внутреннего края пилюли бара с тем же зазором; сбоку растёт вверх от popAt, сверху — вниз и влево
         anchor.item: pill
-        anchor.rect: root.vert ? Qt.rect(pill.width + Theme.state.barGap, root.popAt.y, 1, 1) : Qt.rect(root.popAt.x, pill.height + Theme.state.barGap, 1, 1)
+        anchor.rect: root.vert ? Qt.rect(pill.width + Theme.barGap, root.popAt.y, 1, 1) : Qt.rect(root.popAt.x, pill.height + Theme.barGap, 1, 1)
         anchor.edges: Edges.Top | Edges.Left
         anchor.gravity: root.vert ? Edges.Top | Edges.Right : Edges.Bottom | Edges.Left
         implicitWidth: Math.ceil(440 * Theme.s)

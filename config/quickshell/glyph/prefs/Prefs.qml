@@ -504,7 +504,7 @@ PanelWindow {
         Page {
             id: bar
             k: 2
-            caption: `bar · ${Theme.state.bar.length} of ${Theme.bars.length} in the tray · ${onTop ? "top" : "left"} edge · ${Theme.state.barSize} %`
+            caption: `bar · ${Theme.state.bar.length} of ${Theme.bars.length} in the tray · ${onTop ? "top" : "left"} edge · ${Theme.state.barSizeMode}`
             readonly property bool onTop: Theme.state.barAt === "top"
             readonly property real step: onTop ? 104 : 68 // слот вдоль бара
             property int cur: 0
@@ -653,11 +653,12 @@ PanelWindow {
                     }
                     Item { width: 1; height: 12 }
                     Toggle { width: 200; text: "window title"; on: Theme.state.barTitle; onFlip: Theme.state.barTitle = !Theme.state.barTitle }
+                    Pick { label: "size"; opts: ["theme", "fit", "px"]; cur: ["theme", "fit", "px"].indexOf(Theme.state.barSizeMode); onPicked: i => Theme.state.barSizeMode = ["theme", "fit", "px"][i] }
                     Row {
                         spacing: 40
-                        // 75 % — минимум, где иконки ещё влезают (самый широкий — кот, 44 из 48)
-                        Dial { label: "thickness · %"; from: 75; to: 110; step: 5; value: Theme.state.barSize; onMoved: v => Theme.state.barSize = v }
-                        Dial { label: "edge gap · px"; from: 4; to: 24; value: Theme.state.barGap; onMoved: v => Theme.state.barGap = v }
+                        // px — толщина в логических пикселях, одинаковая на любом экране; 48 — минимум, где контент влезает
+                        Dial { label: "thickness · px"; from: 48; to: 96; value: Theme.state.barSizePx; onMoved: v => Theme.state.barSizePx = v }
+                        Dial { label: "edge gap · px"; from: 0; to: 24; value: Theme.state.barGapPx; onMoved: v => Theme.state.barGapPx = v }
                     }
                     Lb { topPadding: 6; text: bar.onTop ? "left of the clock" : "above the clock"; px: 10 }
                 }
@@ -1322,10 +1323,10 @@ PanelWindow {
         Rectangle {
             readonly property real u: Theme.s * parent.k
             readonly property bool onTop: Theme.state.barAt === "top"
-            x: Theme.state.barGap * u
-            y: Theme.state.barGap * u
-            width: onTop ? parent.width - 2 * Theme.state.barGap * u : Theme.barThick * u
-            height: onTop ? Theme.barThick * u : parent.height - 2 * Theme.state.barGap * u
+            x: Theme.barGap * u
+            y: Theme.barGap * u
+            width: onTop ? parent.width - 2 * Theme.barGap * u : Theme.barThick * u
+            height: onTop ? Theme.barThick * u : parent.height - 2 * Theme.barGap * u
             radius: Theme.corner(Math.min(width, height) / 2)
             color: Theme.s1
             border { width: 1; color: Theme.s2 }

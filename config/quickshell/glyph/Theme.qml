@@ -151,9 +151,13 @@ Singleton {
     function fade(c, a) { return Qt.rgba(c.r, c.g, c.b, a); }
     // радиус угла панели, плитки, пилюли — по настройке corners (prefs → WINDOWS → panels): 0 прямые, 100 как задумано
     function corner(px) { return px * st.corners / 100; }
-    // бар: толщина пилюли и зазор от края экрана. От них считают Bar, Cal, Glyph, Home и макеты в Prefs
-    readonly property int barThick: Math.round(64 * st.barSize / 100)
-    readonly property int barSpan: st.barGap + barThick // от края экрана до внутреннего края пилюли
+    // бар: толщина пилюли и зазор от края в единицах макета, из логических px (или theme/fit). От них считают
+    // Bar, Cal, Glyph, Home и макеты в Prefs
+    readonly property int barThick: st.barSizeMode === "fit" ? 48
+        : st.barSizeMode === "px" ? Math.max(48, Math.min(96, Math.round(st.barSizePx / s)))
+        : 64
+    readonly property int barGap: Math.max(0, Math.min(24, Math.round(st.barGapPx / s)))
+    readonly property int barSpan: barGap + barThick // от края экрана до внутреннего края пилюли
     // часы по настройке 12/24: «09» или «9»
     function hh(d) { const h = d.getHours(); return st.clock24 ? String(h).padStart(2, "0") : String(h % 12 || 12); }
     function hex(c) { return c.toString().slice(1, 7).toUpperCase(); }
@@ -207,8 +211,9 @@ Singleton {
             property var bar: ["layout", "wifi", "bluetooth", "sound", "notes", "battery", "mode", "power"] // трей бара сверху вниз, см. bars
             property bool barTitle: true   // заголовок окна столбиком в баре
             property string barAt: "left" // left или top; за баром едут календарь, карточка батареи, дом, остров и вспышка Glyph
-            property int barSize: 100     // толщина пилюли бара, % от 64 (75 — минимум, где иконки ещё влезают)
-            property int barGap: 14       // зазор от края экрана, px макета
+            property string barSizeMode: "theme" // theme — 64 макета как задумано; fit — минимум, где контент влезает; px — толщина задана в логических px
+            property int barSizePx: 64    // толщина в логических px (режим px), 48–96
+            property int barGapPx: 14     // зазор от края в логических px, 0–24
             // свои у монитора, по модели (Theme.sid): { "TS2700-S6-1": { bar: false, home: false, wall: "…", widgets: […] } }; нет — общие (Theme.scr)
             property var screens: ({})
             // запись (quick/Rec, Sys.recArgs)
