@@ -1066,7 +1066,7 @@ PanelWindow {
             }
             Row {
                 spacing: 24
-                Pick { label: "scale"; opts: Rules.scales; cur: disp.w.scale ? Rules.scales.indexOf(String(disp.w.scale)) : 0; onPicked: i => Rules.set(disp.m.name, "scale", i ? +Rules.scales[i] : 0) }
+                Pick { label: "scale"; seg: Math.min(104, 480 / opts.length); opts: Rules.scales; cur: disp.w.scale ? Rules.scales.indexOf(String(disp.w.scale)) : 0; onPicked: i => Rules.set(disp.m.name, "scale", i ? +Rules.scales[i] : 0) }
                 // частот бывает и пять, и восемь (телевизор, 165 Гц) — уже сегменты, чтобы строка не ушла за край холста
                 Pick { label: "hz"; seg: Math.min(104, 416 / opts.length); opts: disp.m.rates.map(String); cur: disp.m.rates.indexOf(disp.w.refresh); onPicked: i => Rules.set(disp.m.name, "refresh", disp.m.rates[i]) }
             }
