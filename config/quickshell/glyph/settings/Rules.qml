@@ -285,7 +285,12 @@ Singleton {
     // auto — ночником владеет служба auto-night-light, здесь не трогаем; on/off — ручной override через IPC,
     // без перезапуска процесса (перезапуск давал вспышку и мешал плавному расписанию)
     function night() {
-        if (store.nightMode === "auto") return;
+        if (store.nightMode === "auto") {
+            // сразу пересчитать расписание, не ждать тика службы: иначе при быстром on→auto
+            // экран остаётся в ручной температуре
+            Quickshell.execDetached([Quickshell.env("HOME") + "/.local/bin/auto-night-light", "--once", "--mode", "auto"]);
+            return;
+        }
         if (store.nightMode === "on")
             Quickshell.execDetached(["hyprctl", "hyprsunset", "temperature", String(store.warmth)]);
         else
