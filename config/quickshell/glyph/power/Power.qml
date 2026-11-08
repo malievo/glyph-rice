@@ -49,8 +49,8 @@ PanelWindow {
         id: stage
         focus: true
         Keys.onPressed: e => {
-            if (e.key === Qt.Key_Up || e.key === Qt.Key_K) root.sel = (root.sel + 4) % 5;
-            else if (e.key === Qt.Key_Down || e.key === Qt.Key_J || e.key === Qt.Key_Tab) root.sel = (root.sel + 1) % 5;
+            if ((e.key === Qt.Key_Up || Scan.hit(e, "k"))) root.sel = (root.sel + 4) % 5;
+            else if (e.key === Qt.Key_Down || Scan.hit(e, "j") || e.key === Qt.Key_Tab) root.sel = (root.sel + 1) % 5;
             else if (e.key === Qt.Key_Return || e.key === Qt.Key_Enter) root.accept();
             else if (e.key === Qt.Key_Escape) root.close();
             else return;

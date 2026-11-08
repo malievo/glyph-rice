@@ -163,12 +163,13 @@ PanelWindow {
             focus: true
             MouseArea { anchors.fill: parent } // клик по панели не закрывает
 
+            // буквы — по физической клавише (Scan): в русской раскладке e.key приходит кириллицей («ы» вместо S)
             Keys.onPressed: e => {
                 const n = root.ways.length;
-                if ((e.key === Qt.Key_Up || e.key === Qt.Key_K) && n) root.cur = (root.cur + n - 1) % n;
-                else if ((e.key === Qt.Key_Down || e.key === Qt.Key_J) && n) root.cur = (root.cur + 1) % n;
+                if ((e.key === Qt.Key_Up || Scan.hit(e, "k")) && n) root.cur = (root.cur + n - 1) % n;
+                else if ((e.key === Qt.Key_Down || Scan.hit(e, "j")) && n) root.cur = (root.cur + 1) % n;
                 else if (e.key === Qt.Key_Return || e.key === Qt.Key_Enter) root.go(root.cur);
-                else if (e.key === Qt.Key_S) root.flip();
+                else if (Scan.hit(e, "s")) root.flip();
                 else if (e.key === Qt.Key_Escape) root.close();
                 else return;
                 list.positionViewAtIndex(root.cur, ListView.Contain);

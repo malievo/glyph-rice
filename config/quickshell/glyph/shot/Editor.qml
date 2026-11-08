@@ -11,7 +11,7 @@ Scope {
     id: root
 
     readonly property var tools: ["pen", "arrow", "rect", "blur", "text"]
-    readonly property var hotkeys: [Qt.Key_P, Qt.Key_A, Qt.Key_R, Qt.Key_B, Qt.Key_T]
+    readonly property var hotkeys: ["p", "a", "r", "b", "t"] // физические P/A/R/B/T — раскладка не важна
     // чернила запекаются в файл — от темы не зависят. Красный здесь — содержимое снимка, не интерфейс
     readonly property var inks: [Theme.nothingRed, "#FFFFFF", "#000000", "#8C8C8C"]
     readonly property var sizes: [3, 6, 12] // толщина в логических пикселях; в снимке — × dpr
@@ -77,14 +77,14 @@ Scope {
             id: st
             focus: true
             Keys.onPressed: e => {
-                const t = root.hotkeys.indexOf(e.key);
+                const t = root.hotkeys.findIndex(n => Scan.hit(e, n));
                 if (e.key === Qt.Key_Escape) root.close();
                 else if (e.key === Qt.Key_Return || e.key === Qt.Key_Enter || (e.key === Qt.Key_S && e.modifiers & Qt.ControlModifier)) root.save();
                 else if (e.key === Qt.Key_Z && e.modifiers & Qt.ControlModifier) root.marks = root.marks.slice(0, -1);
                 else if (t >= 0) root.tool = t;
                 else if (e.key >= Qt.Key_1 && e.key <= Qt.Key_4) root.ink = e.key - Qt.Key_1;
-                else if (e.key === Qt.Key_BracketLeft) root.size = Math.max(0, root.size - 1);
-                else if (e.key === Qt.Key_BracketRight) root.size = Math.min(2, root.size + 1);
+                else if (Scan.hit(e, "leftBracket")) root.size = Math.max(0, root.size - 1);
+                else if (Scan.hit(e, "rightBracket")) root.size = Math.min(2, root.size + 1);
                 else return;
                 e.accepted = true;
             }

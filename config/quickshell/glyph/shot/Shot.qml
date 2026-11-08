@@ -141,7 +141,7 @@ Scope {
                 else if (e.key === Qt.Key_Space) root.mode = 1;
                 else if (e.key === Qt.Key_Tab) root.mode = (root.mode + 1) % 4;
                 else if (e.key === Qt.Key_Backtab) root.mode = (root.mode + 3) % 4;
-                else if (e.key === Qt.Key_T) root.delay = (root.delay + 1) % 3;
+                else if (Scan.hit(e, "t")) root.delay = (root.delay + 1) % 3;
                 else return;
                 e.accepted = true;
             }
