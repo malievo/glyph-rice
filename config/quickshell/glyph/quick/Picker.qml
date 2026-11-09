@@ -5,7 +5,7 @@ import qs
 import qs.components
 
 // список под пилюлями (правый клик по Wi-Fi/Bluetooth). Сети: клик подключает и отключает, новая защищённая — строка пароля.
-// Устройства: связанные клик соединяет и разрывает, чужие — знакомит (pair). Ищет, только пока список открыт
+// Устройства: связанные клик соединяет и разрывает, чужие — знакомит (pair) и затем досоединяет (connect). Ищет, только пока список открыт
 Rectangle {
     id: root
     property string kind // "wifi" | "bt" | "" — закрыт
@@ -24,13 +24,6 @@ Rectangle {
     readonly property bool portal: Networking.connectivity === NetworkConnectivity.Portal
 
     property var ask: null // сеть, которой нужен пароль
-    // доверие — когда знакомство состоялось, не до: доверенному BlueZ пускает входящие подключения без спроса, и отменённое
-    // знакомство с чужим «наушником» оставляло бы его доверенным. Доверенный сам переподключается (наушники из кейса)
-    property var pend: null
-    Connections {
-        target: root.pend
-        function onPairedChanged() { if (root.pend.paired) { root.pend.trusted = true; root.pend = null; } }
-    }
     property string err
     // kind, не open: привязка open к этому сигналу может быть ещё не пересчитана, и первое открытие показывало bluetooth
     onKindChanged: { if (kind === "wifi" || kind === "bt") shown = kind; ask = null; err = ""; fl.contentY = 0; }
@@ -48,6 +41,76 @@ Rectangle {
 
     Binding { when: root.kind === "wifi" && root.on; target: root.wifi; property: "scannerEnabled"; value: true }
     Binding { when: root.kind === "bt" && root.on; target: root.bt; property: "discovering"; value: true }
+
+    // ---- знакомство: BlueZ хранит bond, только пока включён bondable (D-Bus Pairable), а после Pair() сам рвёт
+    // временное соединение — профили (A2DP) поднимает Connect. Держим Pairable на время пары, досоединяемся после ----
+    property var pairTarget: null // с кем знакомимся: pairStart → pair() → pairBonded → connect с ретраями
+    property bool pairableWas: false
+    property bool pairStarted: false
+
+    function pairStart(o) {
+        const bt = root.bt;
+        if (!bt) return;
+        pairTarget = o;
+        pairableWas = bt.pairable;
+        pairStarted = false;
+        bt.pairable = true;
+        pairGate.start();
+        pairSafety.restart();
+    }
+    // Pair кончился: bond уже записан, Pairable больше не нужен — возвращаем и поднимаем профили.
+    // Доверяем только теперь: доверенному BlueZ пускает входящие подключения без спроса
+    function pairBonded() {
+        pairStarted = false;
+        pairSafety.stop();
+        if (root.pairTarget?.paired) root.pairTarget.trusted = true;
+        root.restorePairable();
+        pairConn.tries = 0;
+        pairConn.stable = 0;
+        pairConn.start();
+    }
+    function restorePairable() { if (root.bt && root.bt.pairable !== pairableWas) root.bt.pairable = pairableWas }
+    function pairClear() { pairTarget = null }
+
+    // Set(Pairable) уходит в BlueZ асинхронно: pair() зовём, когда свойство реально включилось (запас — ~1.4 с)
+    Timer {
+        id: pairGate
+        interval: 120
+        repeat: true
+        running: root.pairTarget !== null && !root.pairStarted
+        property int ticks: 0
+        onTriggered: if (root.bt?.pairable || ++ticks >= 12) {
+            ticks = 0;
+            root.pairStarted = true;
+            root.pairTarget?.pair();
+            if (root.pairTarget && !root.pairTarget.pairing) root.pairBonded(); // pair() не стартовал (уже спарено)
+        }
+    }
+    // после Pair() временное соединение вот-вот отвалится: пережидаем и зовём Connect, пока связь не встанет
+    Timer {
+        id: pairConn
+        interval: 800
+        repeat: true
+        property int tries: 0
+        property int stable: 0
+        onTriggered: {
+            if (!root.pairTarget) return pairConn.stop();
+            if (root.pairTarget.connected) {
+                if (++stable >= 3) { pairConn.stop(); root.pairClear(); }
+                return;
+            }
+            stable = 0;
+            if (++tries > 8) { pairConn.stop(); root.pairClear(); return; }
+            root.pairTarget.connect();
+        }
+    }
+    // страховка: сигнал о конце Pair может не прийти — Pairable не должен остаться включённым
+    Timer { id: pairSafety; interval: 30000; onTriggered: { root.restorePairable(); pairStarted = false; root.pairClear(); } }
+
+    Connections {
+        target: root.pairTarget
+        function onPairingChanged() { if (root.pairStarted && !root.pairTarget.pairing) root.pairBonded() }
+    }
 
     // своя сверху, дальше сохранённые, дальше по силе. Пока вводят пароль — только та сеть: пересортировка не съест набранное
     readonly property var nets: !isWifi || !wifi ? [] : wifi.networks.values.filter(n => n.name)
@@ -70,11 +133,12 @@ Rectangle {
         touched();
         err = "";
         if (!isWifi) {
-            if (o.pairing) {
-                if (pend === o) pend = null;
-                return o.cancelPair();
+            if (root.pairTarget === o) {
+                if (o.pairing) { root.restorePairable(); pairSafety.stop(); root.pairClear(); return o.cancelPair(); }
+                return; // знакомство уже идёт: ждём Pairable/pair
             }
-            if (!o.paired) { pend = o; return o.pair(); }
+            if (root.pairTarget) return; // идёт знакомство с другим — не мешаем
+            if (!o.paired) return root.pairStart(o);
             return o.connected ? o.disconnect() : o.connect();
         }
         if (o.connected) return portal ? portalRequested() : o.disconnect();
