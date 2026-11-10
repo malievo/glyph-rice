@@ -1,3 +1,7 @@
+> **Personal fork.** This is my personal fork of [glyph-rice](https://github.com/Nebelung-cloud/glyph-rice). The `local` branch is my own setup — my monitor names, keybinds and integrations (for example Happ VPN). It is not a supported release and may not fit your hardware or workflow. Upstream and the official install instructions are in the original repository.
+
+<br>
+
 <div align="center">
 
 <img src="assets/title.svg" width="760" alt="Glyph: a Nothing OS rice for Hyprland + Quickshell">
