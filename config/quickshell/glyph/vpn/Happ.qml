@@ -5,10 +5,11 @@ import Quickshell.Services.SystemTray
 import Quickshell.Wayland
 import qs
 import qs.components
+import qs.services
 
-// happ: отдельная панель для Happ (Super+Alt+P). Та же вёрстка, что у vpn, но источник — Happ:
+// happ: отдельная панель для Happ (Super+P). Та же вёрстка, что у vpn, но источник — Happ:
 // серверы, статус и режим — пункты его трея (dbusmenu), скорость — счётчики его tun-интерфейса happ*, адрес сервера — Happ.conf.
-// Выбор сервера и вкл/выкл — нажатием пунктов трея; если пункта нет — happ://connect|disconnect.
+// Выбор сервера и вкл/выкл — нажатием пунктов трея.
 // ponytail: пункты ищем по русским подписям трея Happ; другой язык — поменять регэкспы ниже
 PanelWindow {
     id: root
@@ -17,7 +18,8 @@ PanelWindow {
     readonly property var happ: SystemTray.items.values.find(i => i.id === "Happ" || i.title === "Happ") ?? null
     function child(op, re) { return op.children.values.find(e => !e.isSeparator && re.test(e.text)) ?? null; }
     QsMenuOpener { id: tray; menu: root.happ?.menu ?? null }
-    QsMenuOpener { id: srv; menu: root.child(tray, /сервер|server/i) }
+    // «Сменить сервер» (или «Сервер»/«Change server»); якорь с начала строки: статус «Подключено <сервер>» тоже содержит «сервер»
+    QsMenuOpener { id: srv; menu: root.child(tray, /^(?:сменить\s+)?сервер|^(?:change\s+|switch\s+)?servers?/i) }
     QsMenuOpener { id: trm; menu: root.child(tray, /транспорт|transport/i) }
     QsMenuOpener { id: tunm; menu: root.child(trm, /tun/i) }
 
@@ -26,11 +28,16 @@ PanelWindow {
     readonly property bool tun: tunIf !== ""
     readonly property bool proxy: live && !tun
 
-    // сервер из пункта «Стокгольм | hysteria2»: город, протокол, код страны
-    readonly property var cities: ({ "Амстердам": "NL", "Стокгольм": "SE", "Хельсинки": "FI", "Париж": "FR", "Варшава": "PL", "Рим": "IT", "Франкфурт": "DE", "Берлин": "DE", "Лондон": "GB", "Вена": "AT", "Мадрид": "ES", "Цюрих": "CH", "Прага": "CZ", "Москва": "RU", "Токио": "JP", "Стамбул": "TR", "Дубай": "AE" })
+    // сервер из пункта «Стокгольм | hysteria2» или «Финляндия⚜️»: название, протокол, код страны
+    // «Финляндия⚜️» → «Финляндия»: значки и эмодзи в названиях серверов ломают поиск страны
+    function plain(s) {
+        let t = "";
+        for (const ch of s) if (ch.codePointAt(0) < 0x2000) t += ch;
+        return t.replace(/\s*#\d+$/, "").trim();
+    }
     function way(e) {
-        const [name, ...rest] = e.text.split(/\s*\|\s*/), city = name.replace(/\s*#\d+$/, "").trim();
-        return { entry: e, cc: cities[city] ?? "··", name: name.trim(), sub: rest.join(" · "), on: e.checkState === Qt.Checked };
+        const [raw, ...rest] = e.text.split(/\s*\|\s*/), name = plain(raw);
+        return { entry: e, cc: HappState.ccOf(e.text, name), name, sub: rest.join(" · "), on: e.checkState === Qt.Checked };
     }
     readonly property var ways: srv.children.values.filter(e => !e.isSeparator).map(e => way(e))
     readonly property var now: ways.find(w => w.on) ?? null
@@ -124,9 +131,14 @@ PanelWindow {
     Behavior on t { NumberAnimation { duration: Theme.t; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.glide } }
 
     function open() {
+        HappState.wake(); // подменю серверов Happ строит только по AboutToShow
         cur = Math.max(0, ways.findIndex(w => w.on));
         shown = true;
         panel.forceActiveFocus();
+    }
+    onWaysChanged: if (shown && ways.length) {
+        if (cur >= ways.length) cur = 0;
+        list.positionViewAtIndex(cur, ListView.Contain);
     }
     function close() { shown = false; }
     function toggle() { shown ? close() : open(); }
