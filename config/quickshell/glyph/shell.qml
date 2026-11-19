@@ -31,7 +31,7 @@ ShellRoot {
         id: quick
         onPowerRequested: power.open()
         onSettingsRequested: prefs.open()
-        onPortalRequested: vpn.requestSignIn()
+        onPortalRequested: Qt.openUrlExternally("http://neverssl.com")
     }
     Power { id: power }
     Prefs { id: prefs; onWallRequested: walls.open() }
@@ -42,9 +42,15 @@ ShellRoot {
     Charms { id: charms }
     Deck { id: deck }
     Shot { id: shot }
-    Vpn { id: vpn; wifiNetwork: quick.net }
     Happ { id: happ }
     Walls { id: walls }
+
+    // панель, открытая кликом из бара, держит бар на экране; клавиатурные (Super+A/P/Space) — нет.
+    // Флаг снимается, когда все панели закрылись
+    property bool barMenuHeld: false
+    readonly property bool anyMenu: cal.open || quick.open || power.visible || launcher.shown || happ.shown
+    onAnyMenuChanged: if (!shell.anyMenu) shell.barMenuHeld = false
+    Binding { target: Sys; property: "barMenu"; value: shell.barMenuHeld && shell.anyMenu }
 
     Variants {
         model: Quickshell.screens
@@ -59,11 +65,14 @@ ShellRoot {
             Bar {
                 screen: s.modelData
                 visible: Theme.scr(s.modelData.name, "bar")
-                onMarkClicked: launcher.toggle()
-                onTrayClicked: quick.toggle()
-                onPowerClicked: power.visible ? power.close() : power.open()
-                onClockClicked: cal.toggle()
-                onVpnClicked: happ.toggle()
+                onMarkClicked: { if (!launcher.shown) shell.barMenuHeld = true; launcher.toggle(); }
+                onTrayClicked: { if (!quick.open) shell.barMenuHeld = true; quick.toggle(); }
+                onPowerClicked: {
+                    if (power.visible) power.close();
+                    else { shell.barMenuHeld = true; power.open(); }
+                }
+                onClockClicked: { if (!cal.open) shell.barMenuHeld = true; cal.toggle(); }
+                onVpnClicked: { if (!happ.shown) shell.barMenuHeld = true; happ.toggle(); }
             }
         }
     }

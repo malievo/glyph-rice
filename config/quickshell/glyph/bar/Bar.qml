@@ -4,6 +4,7 @@ import QtQuick.Shapes
 import Quickshell
 import Quickshell.Bluetooth
 import Quickshell.Hyprland
+import Quickshell.Io
 import Quickshell.Networking
 import Quickshell.Services.UPower
 import Quickshell.Wayland
@@ -42,6 +43,160 @@ PanelWindow {
     readonly property var bat: UPower.displayDevice
     readonly property var wifi: Networking.devices.values.find(d => d.type === DeviceType.Wifi) ?? null
 
+    // ---- смена раскладки при скрытом баре: короткая пилюля у края, чтобы не терять en/ru ----
+    property bool flashArmed: false
+    property string flashText: ""
+    property real flashOn: 0
+    Behavior on flashOn { NumberAnimation { duration: root.shown ? 0 : (root.flashOn ? 150 : 250); easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.glide } }
+    Timer { running: true; interval: 1500; onTriggered: root.flashArmed = true }
+    Timer { id: flashT; interval: 900; onTriggered: root.flashOn = 0 }
+    onShownChanged: if (root.shown) { flashT.stop(); root.flashOn = 0; deskT.stop(); root.deskOn = 0; }
+    Connections {
+        target: Sys
+        function onLayoutChanged() {
+            if (!root.flashArmed || root.shown) return;
+            if (Hyprland.focusedMonitor?.name !== root.screen?.name) return;
+            root.flashText = Sys.layout.toUpperCase();
+            root.flashOn = 1;
+            flashT.restart();
+        }
+    }
+    // ---- смена стола при скрытом баре: мини-кластер точек, как в баре (текущий вытянут) ----
+    property bool deskArmed: false
+    property real deskOn: 0
+    Behavior on deskOn { NumberAnimation { duration: root.deskOn ? 150 : 250; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.glide } }
+    Timer { running: true; interval: 1500; onTriggered: root.deskArmed = true }
+    Timer { id: deskT; interval: 900; onTriggered: root.deskOn = 0 }
+    onActiveChanged: {
+        if (!root.deskArmed || Hyprland.focusedMonitor?.name !== root.screen?.name) return;
+        root.deskOn = 1;
+        deskT.restart();
+    }
+
+    // ---- спец-стол: точки блюрятся, поверх — имя; при скрытом баре — постоянный чип, при выходе — вспышка столов ----
+    property string specialWs: ""
+    readonly property bool isSpecial: root.specialWs !== ""
+    readonly property string specialText: root.specialName(root.specialWs)
+    property real specLook: root.isSpecial ? 1 : 0
+    Behavior on specLook { NumberAnimation { duration: Theme.t; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.glide } }
+    function specialName(n) {
+        const m = ({ music: "MUSIC", communication: "COMM", todo: "TODO", sysmon: "SYS", special: "SPEC" });
+        return (m[n] ?? (n.length > 6 ? n.slice(0, 6) : n)).toUpperCase();
+    }
+    function syncSpecial() { const n = (mon?.lastIpcObject?.specialWorkspace?.name ?? "").replace(/^special:/, ""); if (n !== root.specialWs) root.specialWs = n; }
+    onIsSpecialChanged: {
+        if (root.isSpecial || !root.deskArmed || Hyprland.focusedMonitor?.name !== root.screen?.name) return;
+        root.deskOn = 1;
+        deskT.restart();
+    }
+    Connections {
+        target: Hyprland
+        function onRawEvent(e) {
+            if (e.name !== "activespecial") return;
+            const p = (e.data ?? "").split(",");
+            if (p[1] !== root.screen?.name) return;
+            root.specialWs = (p[0] ?? "").replace(/^special:/, "").trim();
+        }
+    }
+    // чип при скрытом баре: спец-стол — постоянный, обычный — по таймеру вспышки
+    property real wsChip: (root.isSpecial && !root.shown) ? 1 : root.deskOn
+    Behavior on wsChip { NumberAnimation { duration: root.shown ? 0 : (root.wsChip ? 150 : 250); easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.glide } }
+
+    // ---- автоскрытие (Theme.state.barMode): always — как обычно, с местом под бар; hidden — прячется, когда на этом
+    // столе есть окна; smart — когда лента заполнена (fullscreen/maximized, колонка во всю ширину или две плитки).
+    // Пока бар виден по режиму — он держит место под собой; скрыт — окна растягиваются; выезд по наведению и с deck
+    // ложится поверх, без рефлоу ----
+    readonly property string mode: Theme.state.barMode
+    readonly property bool auto: mode !== "always"
+    readonly property bool full: mon?.activeWorkspace?.hasFullscreen ?? false
+    readonly property var wins: Hyprland.toplevels.values.filter(t => t.workspace?.id === root.active)
+    readonly property var tiles: root.wins.filter(t => !(t.lastIpcObject?.floating ?? false))
+    // firefox и игры — колонка 1.0 в ленте, а не maximized: полноширинное окно считаем заполнением.
+    // У окон, открытых до старта шелла, lastIpcObject без size — ширину берём из свежего hyprctl clients
+    property var geo: ({})
+    property var normal: ({}) // ширины, виденные вне maximized: по ним решаем сразу после выхода
+    Process {
+        id: clients
+        command: ["hyprctl", "clients", "-j"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const m = {};
+                for (const c of JSON.parse(text || "[]")) m[String(c.address ?? "").replace(/^0x/, "")] = c.size?.[0] ?? 0;
+                root.geo = m;
+                if (!root.full) root.normal = m;
+            }
+        }
+    }
+    Timer { running: root.auto && root.mode === "smart"; interval: 2000; repeat: true; triggeredOnStart: true; onTriggered: if (!clients.running) clients.running = true }
+    onWinsChanged: if (root.auto && root.mode === "smart" && !clients.running) clients.running = true
+    // Super+F туда-сюда: ширина окна меняется сразу, а тик ждёт до 2 с — перечитываем, как только сменился fullscreen
+    Timer { id: geoSoon; interval: 30; onTriggered: clients.running ? geoSoon.restart() : clients.running = true }
+    onFullChanged: if (root.auto && root.mode === "smart") geoSoon.restart()
+    readonly property bool wide: root.tiles.length === 1
+        && (root.normal[root.tiles[0].address] ?? root.geo[root.tiles[0].address] ?? root.tiles[0].lastIpcObject?.size?.[0] ?? 0)
+            >= 0.9 * (screen?.width ?? 1920) * (screen?.devicePixelRatio ?? 1)
+    readonly property bool wanted: !root.auto || (root.mode === "hidden" || !Sys.smartOK ? root.wins.length === 0
+        : !root.full && !root.wide && root.tiles.length <= 1)
+    property bool hovered: false
+    property bool peeking: false
+    readonly property bool shown: root.wanted || root.peeking || Sys.deckKeyed || Sys.barMenu || root.powOpen
+    property real t: root.shown ? 1 : 0
+    Behavior on t { NumberAnimation { duration: root.shown ? Theme.t : root.exitMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.glide } }
+    // окно живёт всегда — иначе не поймать курсор; скрытым ловит только полоска у края
+    readonly property int edge: 4
+    readonly property int exitMs: 300 // выход чуть длиннее анимации окна (windowsIn speed 5 ≈ 200 мс)
+    // зоны показа: вертикальный бар + scrolling — сверху и снизу, середина остаётся ленте
+    readonly property bool zoneHere: root.vert && Sys.scrollLayout && Theme.state.barReveal !== "edge"
+    readonly property int zoneTop: Theme.state.barReveal === "default" ? 150 : Theme.state.barZoneTop
+    readonly property int zoneBottom: Theme.state.barReveal === "default" ? 150 : Theme.state.barZoneBottom
+    readonly property int hitW: root.shown ? root.width : (root.vert ? root.edge : root.width)
+    readonly property int hitH1: root.shown ? root.height : (root.zoneHere ? root.zoneTop : (root.vert ? root.height : root.edge))
+    readonly property int hitH2: !root.shown && root.zoneHere ? root.zoneBottom : 0
+    mask: Region {
+        intersection: Intersection.Combine
+        Region { x: 0; y: 0; width: root.hitW; height: root.hitH1 }
+        Region { x: 0; y: root.height - root.hitH2; width: root.hitW; height: root.hitH2 }
+    }
+    exclusionMode: root.wanted ? ExclusionMode.Auto : ExclusionMode.Ignore
+    // бар занимает место по режиму — OSD встаёт под него; peek/панели сюда не входят
+    function syncBarVisible() {
+        const m = Object.assign({}, Sys.barVisible);
+        if (root.screen?.name) m[root.screen.name] = root.wanted;
+        Sys.barVisible = m;
+    }
+    Component.onCompleted: { syncBarVisible(); syncSpecial(); }
+    Component.onDestruction: { const m = Object.assign({}, Sys.barVisible); delete m[root.screen?.name ?? ""]; Sys.barVisible = m; }
+    onWantedChanged: {
+        root.syncBarVisible();
+        if (root.wanted) {
+            root.peeking = false;
+            holdT.stop();
+            hideT.stop();
+        } else if (root.hovered) root.peeking = true;
+        else if (root.peeking) hideT.restart();
+    }
+    Timer { id: holdT; interval: Theme.state.barHoldMs; onTriggered: if (root.hovered && !root.wanted) root.peeking = true }
+    Timer { id: hideT; interval: 300; onTriggered: root.peeking = false }
+    // после выезда hover может потеряться при смене input-региона: держим видимость по позиции курсора
+    Process {
+        id: cur
+        command: ["hyprctl", "cursorpos"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const p = text.trim().split(/[, ]+/);
+                const x = +p[0], y = +p[1], s = root.screen;
+                if (!s || isNaN(x) || isNaN(y)) return;
+                const lx = x - s.x, ly = y - s.y;
+                const inside = lx >= 0 && ly >= 0
+                    && lx <= (root.vert ? root.width + 12 : s.width)
+                    && ly <= (root.vert ? s.height : root.height + 12);
+                if (inside) hideT.stop();
+                else if (!hideT.running) hideT.restart();
+            }
+        }
+    }
+    Timer { running: root.peeking && root.shown; interval: 120; repeat: true; triggeredOnStart: true; onTriggered: if (!cur.running) cur.running = true }
+
     // hyprland 0.56 с lua: dispatch принимает lua-выражение
     // сначала монитор этого бара: иначе стол откроется на том мониторе, где сейчас фокус (главный)
     function go(ws) {
@@ -52,10 +207,27 @@ PanelWindow {
     SystemClock { id: clock; precision: SystemClock.Minutes }
 
     Stage {
+
+        HoverHandler {
+            onHoveredChanged: {
+                root.hovered = hovered;
+                if (hovered) {
+                    hideT.stop();
+                    if (!root.wanted) {
+                        if (root.shown) root.peeking = true;
+                        else holdT.restart();
+                    }
+                } else {
+                    holdT.stop();
+                }
+            }
+        }
+
         Rectangle {
             id: pill
-            x: Theme.barGap // от краёв экрана
-            y: Theme.barGap
+            x: Theme.barGap + (root.vert ? -(1 - root.t) * (pill.width + Theme.barGap) : 0) // сбоку уезжает влево
+            y: Theme.barGap + (root.vert ? 0 : -(1 - root.t) * (pill.height + Theme.barGap)) // сверху — вверх
+            opacity: root.t
             width: root.vert ? Theme.barThick : parent.width - 2 * Theme.barGap
             height: root.vert ? parent.height - 2 * Theme.barGap : Theme.barThick
             radius: Theme.corner(Theme.barThick / 2)
@@ -88,6 +260,9 @@ PanelWindow {
                 x: root.vert ? (parent.width - width) / 2 : mark.x + mark.width + 24
                 y: root.vert ? mark.y + mark.height + 24 : (parent.height - height) / 2
                 spacing: 8
+                opacity: 1 - 0.8 * root.specLook
+                layer.enabled: root.specLook > 0.01
+                layer.effect: MultiEffect { blurEnabled: true; blur: root.specLook; blurMax: 24 }
 
                 Repeater {
                     model: root.count
@@ -107,6 +282,15 @@ PanelWindow {
                         MouseArea { anchors.fill: parent; anchors.margins: -6; onClicked: root.go(parent.n) }
                     }
                 }
+            }
+            Lb {
+                visible: root.specLook > 0.01
+                opacity: root.specLook
+                anchors.centerIn: ws
+                text: root.specialText
+                px: 11
+                color: Theme.fg
+                rotation: root.vert ? 90 : 0
             }
 
             // заголовок окна: от воркспейсов до часов, сбоку — повёрнутый
@@ -148,7 +332,8 @@ PanelWindow {
             }
 
             // трей — Theme.state.bar по порядку (настройки, раздел BAR). Раскладка, сеть, bluetooth, звук (колесо — громкость),
-            // уведомления, батарея, бегущий кот: клик открывает быстрые настройки. Режим питания и питание — свои клики
+            // mic, уведомления, батарея, бегущий кот: клик открывает быстрые настройки. У mic и звука левый клик — сам тумблер,
+            // правый — быстрые настройки. Режим питания и питание — свои клики
             Pile {
                 x: root.vert ? (parent.width - width) / 2 : parent.width - width - 22
                 y: root.vert ? parent.height - height - 22 : (parent.height - height) / 2
@@ -160,9 +345,11 @@ PanelWindow {
                         id: part
                         required property string modelData
                         readonly property bool quick: modelData !== "mode" && modelData !== "power" && modelData !== "vpn"
+                        readonly property bool direct: modelData === "mic" || modelData === "sound" // левый клик — тумблер, правый — quick
                         sourceComponent: root.parts[modelData] ?? null
                         visible: !!sourceComponent && (modelData !== "battery" || root.bat.isLaptopBattery)
-                        TapHandler { enabled: part.quick; onTapped: root.trayClicked() }
+                        TapHandler { enabled: part.quick && !part.direct; onTapped: root.trayClicked() }
+                        TapHandler { acceptedButtons: Qt.RightButton; enabled: part.direct; onTapped: root.trayClicked() }
                         HoverHandler { enabled: part.quick; cursorShape: Qt.PointingHandCursor }
                         TapHandler { enabled: modelData === "vpn"; onTapped: root.vpnClicked() }
                         HoverHandler { enabled: modelData === "vpn"; cursorShape: Qt.PointingHandCursor }
@@ -170,8 +357,81 @@ PanelWindow {
                 }
             }
         }
+
+        Rectangle {
+            id: flash
+            z: -1
+            visible: root.flashOn > 0
+            opacity: root.flashOn
+            x: root.vert ? (parent.width - width) / 2 : parent.width - width - 36
+            y: root.vert ? parent.height - height - 36 : 14
+            width: 46
+            height: 26
+            radius: Theme.corner(13)
+            color: Theme.s1
+            border { width: 1; color: Theme.s2 }
+            transform: Translate {
+                x: root.vert ? -(1 - root.flashOn) * 12 : 0
+                y: root.vert ? 0 : -(1 - root.flashOn) * 10
+            }
+            Lb { anchors.centerIn: parent; text: root.flashText; color: Theme.fg; px: 10 }
+        }
+
+        Rectangle {
+            id: wsFlash
+            z: -1
+            visible: root.wsChip > 0
+            opacity: root.wsChip
+            x: root.vert ? (parent.width - width) / 2 : 76
+            y: root.vert ? 76 : 14
+            width: cluster.implicitWidth + 28
+            height: cluster.implicitHeight + 28
+            radius: Theme.corner(13)
+            color: Theme.s1
+            border { width: 1; color: Theme.s2 }
+            transform: Translate {
+                x: root.vert ? -(1 - root.wsChip) * 12 : 0
+                y: root.vert ? 0 : -(1 - root.wsChip) * 10
+            }
+            // как точки в баре: сверху — строкой, сбоку — столбиком (окно бара сбоку узкое)
+            Lb {
+                id: chipText
+                visible: root.specLook > 0.01
+                opacity: root.specLook
+                anchors.centerIn: parent
+                text: root.specialText
+                px: 10
+                color: Theme.fg
+                rotation: root.vert ? 90 : 0
+            }
+            Flow {
+                id: cluster
+                anchors.centerIn: parent
+                flow: root.vert ? Flow.TopToBottom : Flow.LeftToRight
+                opacity: 1 - 0.8 * root.specLook
+                layer.enabled: root.specLook > 0.01
+                layer.effect: MultiEffect { blurEnabled: true; blur: root.specLook; blurMax: 24 }
+                spacing: 6
+                Repeater {
+                    model: root.count
+                    Rectangle {
+                        required property int index
+                        readonly property int n: root.base + index + 1
+                        readonly property bool occ: (Hyprland.workspaces.values.find(w => w.id === n)?.toplevels.values.length ?? 0) > 0
+                        readonly property bool on: root.active === n
+                        width: root.vert ? 6 : (on ? 20 : 6)
+                        height: root.vert ? (on ? 20 : 6) : 6
+                        radius: 3
+                        color: on ? Theme.fg : occ ? Theme.grey : Theme.s3
+                        Behavior on width { NumberAnimation { duration: Theme.t; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.glide } }
+                        Behavior on height { NumberAnimation { duration: Theme.t; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.glide } }
+                        Behavior on color { ColorAnimation { duration: Theme.t } }
+                    }
+                }
+            }
+        }
     }
-    readonly property var parts: ({ layout: layoutC, wifi: wifiC, bluetooth: btC, sound: soundC, notes: notesC, battery: batC, mode: modeC, power: powerC, cat: catC, vpn: vpnC })
+    readonly property var parts: ({ layout: layoutC, wifi: wifiC, bluetooth: btC, sound: soundC, mic: micC, notes: notesC, battery: batC, mode: modeC, power: powerC, cat: catC, vpn: vpnC })
     Component { id: layoutC; Lb { text: Sys.layout; px: 10 } }
     // кот RunCat: чем больше cpu, тем быстрее бежит (250 мс на кадр в простое, 50 на полной). cpu опрашивается, пока он в трее;
     // Binding не в делегате — уничтоженный значение не возвращает. Серый как есть, в светлой теме на белом теряется — чёрный, как buds
@@ -235,6 +495,16 @@ PanelWindow {
         Icon {
             text: Sys.muted ? "\u{F075F}" : "\u{F057E}"
             Notch { onNotch: d => Sys.setVol(Sys.vol + d * 0.05) }
+            TapHandler { onTapped: Sys.toggleMute() }
+        }
+    }
+    // mic: глушит дефолтный источник, как плитка в quick; включён — белый, выключен — серый. Правый клик — quick (обработчик в трее)
+    Component {
+        id: micC
+        Icon {
+            text: Sys.micOn ? "\u{F036C}" : "\u{F036D}"
+            color: Sys.micOn ? Theme.fg : Theme.grey
+            TapHandler { onTapped: Sys.toggleMic() }
         }
     }
     Component {

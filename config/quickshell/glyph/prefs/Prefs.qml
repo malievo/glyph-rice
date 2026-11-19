@@ -25,13 +25,15 @@ PanelWindow {
     readonly property string rings: "drag round the rings · scroll"
     readonly property var hints: [moves, moves, moves, "", "hover to preview · ↵ or click sets it", rings, "drag a screen to move it · " + rings, "click or ←→ a device", "↵ or click a mode", rings, "drag the marks", ""]
     readonly property var r: Rules.store
+    // глубина есть не у каждого раздела: дверь и сам режим — только там, где есть страница
+    readonly property bool deepHere: deepPages.has(sections[sel])
 
     // глифы видов дома, секций deck и трея бара
     readonly property var icons: ({
         weather: "\u{F0595}", calendar: "\u{F00ED}", cpu: "\u{F061A}", ram: "\u{F035B}", gpu: "\u{F08AE}", disk: "\u{F02CA}",
         battery: "\u{F0079}", buds: "\u{F02CB}", player: "\u{F040A}", system: "\u{F0128}", cat: "\u{F011B}", cava: "\u{F0EA2}",
         clock: "\u{F0150}", perf: "\u{F04C5}", net: "\u{F05A9}", media: "\u{F075A}",
-        layout: "\u{F030C}", wifi: "\u{F05A9}", bluetooth: "\u{F00AF}", sound: "\u{F057E}", notes: "\u{F009A}",
+        layout: "\u{F030C}", wifi: "\u{F05A9}", bluetooth: "\u{F00AF}", sound: "\u{F057E}", mic: "\u{F036C}", notes: "\u{F009A}",
         mode: "\u{F04C5}", power: "\u{F0425}", vpn: "\u{F0565}"
     })
     // круглые виджеты дома, остальные — квадрат 40. ponytail: ram/gpu/disk/battery — догадка (кольца); решит Home — поправить
@@ -39,6 +41,7 @@ PanelWindow {
 
     // ---- открытие: сам себе анимация (у слоёв glyph в hypr no_anim). Раздел помнится между открытиями ----
     property bool shown: false
+    property bool deep: false // расширенные: те же 12 слов слева, справа — свиток раздела
     property real t: shown ? 1 : 0
     Behavior on t { NumberAnimation { duration: Theme.t; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.glide } }
     function open() {
@@ -46,10 +49,11 @@ PanelWindow {
         shown = true;
         stage.forceActiveFocus();
     }
-    function close() { shown = false; }
+    function close() { shown = false; deep = false; }
     function toggle() { shown ? close() : open(); }
     function go(i) {
         sel = (i + sections.length) % sections.length;
+        if (deep && !deepHere) deep = false; // ушли в раздел без глубины — назад к предметам
         stage.forceActiveFocus(); // фокус в скрытом разделе потерялся бы
     }
 
@@ -126,6 +130,8 @@ PanelWindow {
         });
     }
 
+    DeepPages { id: deepPages }
+
     SystemClock { id: clock; enabled: root.visible; precision: SystemClock.Minutes }
     readonly property string hello: { const h = clock.date.getHours(); return h < 5 ? "Good night" : h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening"; }
     readonly property string who: (Theme.state.name || Quickshell.env("USER")).replace(/&/g, "&amp;").replace(/</g, "&lt;")
@@ -166,7 +172,7 @@ PanelWindow {
             if (e.key === Qt.Key_Up || e.key === Qt.Key_K) root.go(root.sel - 1);
             else if (e.key === Qt.Key_Down || e.key === Qt.Key_J) root.go(root.sel + 1);
             else if (e.key === Qt.Key_Right && stage.activeFocus) stage.nextItemInFocusChain(true)?.forceActiveFocus();
-            else if (e.key === Qt.Key_Escape) root.close();
+            else if (e.key === Qt.Key_Escape) { if (root.deep) root.deep = false; else root.close(); }
             else return;
             e.accepted = true;
         }
@@ -206,12 +212,88 @@ PanelWindow {
 
         Row {
             x: 150
+            height: 34
             anchors { bottom: parent.bottom; bottomMargin: 70 }
             spacing: 34
-            Lb { text: "↑↓ section" }
-            Lb { text: "tab · ←→ change" }
-            Lb { visible: !!text; text: root.hints[root.sel] }
-            Lb { text: "esc close"; TapHandler { onTapped: root.close() } }
+            Lb { anchors.verticalCenter: parent.verticalCenter; text: "↑↓ section" }
+            Lb { anchors.verticalCenter: parent.verticalCenter; text: "tab · ←→ change" }
+            Lb { anchors.verticalCenter: parent.verticalCenter; visible: !root.deep && !!text; text: root.hints[root.sel] }
+            Lb { anchors.verticalCenter: parent.verticalCenter; visible: root.deep; text: "tab · scroll" }
+            Lb {
+                anchors.verticalCenter: parent.verticalCenter
+                text: root.deep ? "esc back" : "esc close"
+                TapHandler { onTapped: { if (root.deep) root.deep = false; else root.close(); } }
+            }
+            // дверь в расширенные: только у разделов со страницей; в режиме — всегда, чтобы выйти
+            Rectangle {
+                id: door
+                visible: root.deep || root.deepHere
+                anchors.verticalCenter: parent.verticalCenter
+                width: doorRow.implicitWidth + 36
+                height: 34
+                radius: 17
+                color: doorMa.containsMouse || door.activeFocus ? Theme.s2 : "transparent"
+                border { width: door.activeFocus ? 1 : 0; color: Theme.fg }
+                activeFocusOnTab: true
+                Keys.onPressed: e => {
+                    if (e.key !== Qt.Key_Return && e.key !== Qt.Key_Enter && e.key !== Qt.Key_Space) return;
+                    root.deep = !root.deep;
+                    e.accepted = true;
+                }
+                Behavior on color { ColorAnimation { duration: Theme.t } }
+
+                Row {
+                    id: doorRow
+                    anchors.centerIn: parent
+                    spacing: 10
+                    Rectangle {
+                        visible: root.deep
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 8
+                        height: 8
+                        radius: 4
+                        color: Theme.accent
+                    }
+                    Lb {
+                        text: root.deep ? "← basic" : "advanced →"
+                        color: root.deep || doorMa.containsMouse || door.activeFocus ? Theme.fg : Theme.grey
+                    }
+                }
+                MouseArea {
+                    id: doorMa
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        door.forceActiveFocus();
+                        root.deep = !root.deep;
+                    }
+                }
+            }
+        }
+
+        // ---- расширенные: свиток выбранного раздела; слева те же слова, раздел помнится общий ----
+        Item {
+            id: deepHost
+            x: 800
+            width: 1100
+            anchors { top: parent.top; bottom: parent.bottom; topMargin: 96; bottomMargin: 96 }
+            visible: opacity > 0
+            opacity: root.deep ? 1 : 0
+            enabled: root.deep
+            Behavior on opacity { NumberAnimation { duration: Theme.t; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.glide } }
+
+            Loader {
+                id: deepLoad
+                anchors.fill: parent
+                active: root.deep || deepHost.opacity > 0
+                sourceComponent: deepPages.bySection[root.sections[root.sel]] ?? deepPages.empty
+                onLoaded: if (item) item.section = root.sections[root.sel]
+            }
+            Connections {
+                target: root
+                function onSelChanged() { if (deepLoad.item) deepLoad.item.section = root.sections[root.sel] }
+            }
         }
 
         // ---- HOME: дом в масштабе 168/220 — те же виды, порядок и укладка. Клик — выбрать, ещё клик или ↵ — следующий вид,
@@ -504,7 +586,7 @@ PanelWindow {
         Page {
             id: bar
             k: 2
-            caption: `bar · ${Theme.state.bar.length} of ${Theme.bars.length} in the tray · ${onTop ? "top" : "left"} edge · ${Theme.state.barSizeMode}`
+            caption: `bar · ${Theme.state.bar.length} of ${Theme.bars.length} in the tray · ${onTop ? "top" : "left"} edge`
             readonly property bool onTop: Theme.state.barAt === "top"
             readonly property real step: onTop ? 104 : 68 // слот вдоль бара
             property int cur: 0
@@ -653,13 +735,6 @@ PanelWindow {
                     }
                     Item { width: 1; height: 12 }
                     Toggle { width: 200; text: "window title"; on: Theme.state.barTitle; onFlip: Theme.state.barTitle = !Theme.state.barTitle }
-                    Pick { label: "size"; opts: ["theme", "fit", "px"]; cur: ["theme", "fit", "px"].indexOf(Theme.state.barSizeMode); onPicked: i => Theme.state.barSizeMode = ["theme", "fit", "px"][i] }
-                    Row {
-                        spacing: 40
-                        // px — толщина в логических пикселях, одинаковая на любом экране; 48 — минимум, где контент влезает
-                        Dial { label: "thickness · px"; from: 48; to: 96; value: Theme.state.barSizePx; onMoved: v => Theme.state.barSizePx = v }
-                        Dial { label: "edge gap · px"; from: 0; to: 24; value: Theme.state.barGapPx; onMoved: v => Theme.state.barGapPx = v }
-                    }
                     Lb { topPadding: 6; text: bar.onTop ? "left of the clock" : "above the clock"; px: 10 }
                 }
             }
@@ -1079,11 +1154,6 @@ PanelWindow {
                 // свои места, масштаб и герцы внешних — забыть, снова как в конфиге hypr (Rules.forget)
                 Act { visible: Object.keys(Rules.store.outs).length > 0; icon: "\u{F0450}"; text: "hypr config"; onHit: Rules.forget() }
             }
-            Row {
-                spacing: 40
-                Pick { anchors.verticalCenter: parent.verticalCenter; label: "night light"; opts: ["auto", "on", "off"]; cur: ["auto", "on", "off"].indexOf(root.r.nightMode); onPicked: i => { root.r.nightMode = ["auto", "on", "off"][i]; Rules.night(); } }
-                Dial { label: "warmth · k · all screens"; from: 2500; to: 6500; step: 100; value: root.r.warmth; onMoved: v => { root.r.warmth = v; if (root.r.nightMode === "on") Rules.night(); } }
-            }
         }
 
         // ---- AUDIO: output and input — volume, mute, level, the default device (prefs/Audio) ----
@@ -1297,7 +1367,7 @@ PanelWindow {
         x: 800
         anchors.verticalCenter: parent.verticalCenter
         anchors.verticalCenterOffset: visible ? 0 : 24
-        visible: root.sel === k
+        visible: root.sel === k && !root.deep
         opacity: visible ? 1 : 0
         spacing: 28
         Behavior on opacity { NumberAnimation { duration: Theme.t; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.glide } }

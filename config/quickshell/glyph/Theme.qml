@@ -208,9 +208,15 @@ Singleton {
             property bool quickHover: true // быстрые настройки по наведению на правый край
             property bool deckHover: true  // deck — панель снизу по центру, вылезает по наведению на край
             property var deck: ["clock", "weather", "perf", "net", "media"] // её секции по порядку, см. decks
-            property var bar: ["layout", "wifi", "bluetooth", "sound", "notes", "battery", "mode", "power"] // трей бара сверху вниз, см. bars
+            property var bar: ["layout", "wifi", "bluetooth", "sound", "mic", "notes", "battery", "mode", "power"] // трей бара сверху вниз, см. bars
             property bool barTitle: true   // заголовок окна столбиком в баре
             property string barAt: "left" // left или top; за баром едут календарь, карточка батареи, дом, остров и вспышка Glyph
+            property string barMode: "always" // always — как обычно, hidden — прячется при любом окне, smart — только когда лента заполнена
+            property int barHoldMs: 300   // hidden/smart: сколько держать курсор у края, прежде чем бар выедет
+            property string barReveal: "default" // edge — вся кромка, default — зоны сверху/снизу, custom — свои длины
+            property int barZoneTop: 150  // логические px: зона показа сверху (вертикальный бар + scrolling)
+            property int barZoneBottom: 150 // и снизу; середина остаётся ленте
+            property bool barZoneSync: false // ручки зон двигаются вместе, верх = низ
             property string barSizeMode: "theme" // theme — 64 макета как задумано; fit — минимум, где контент влезает; px — толщина задана в логических px
             property int barSizePx: 64    // толщина в логических px (режим px), 48–96
             property int barGapPx: 14     // зазор от края в логических px, 0–24
@@ -232,7 +238,7 @@ Singleton {
     // секции deck
     readonly property var decks: ["clock", "weather", "perf", "net", "media"]
     // трей бара
-    readonly property var bars: ["layout", "wifi", "bluetooth", "sound", "notes", "battery", "mode", "power", "cat", "vpn"]
+    readonly property var bars: ["layout", "wifi", "bluetooth", "sound", "mic", "notes", "battery", "mode", "power", "cat", "vpn"]
 
     // ---- вид всего, что вне шелла. Зовёт только shell.qml: на старте, при смене темы и цвета ----
     // hypr наследует demonshot: монитор, ввод, простой, ночник и движение ставит его же Rules (shell.qml), анимации — из

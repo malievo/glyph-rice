@@ -19,6 +19,31 @@ Singleton {
     // пикер обоев открыт — дом меняет обои сразу, без волны: её уже показал пикер
     property bool wallOpen: false
 
+    // ---- бар hidden/smart: deck открыт с клавиатуры — бар выезжает вместе с ним. smart — только для scrolling-ленты
+    // с центрированной одиночной колонкой; проверяем в рантайме, иначе бар ведёт себя как hidden ----
+    property bool deckKeyed: false
+    property bool barMenu: false // открыта панель из бара (календарь, quick, power, лаунчер, VPN) — бар не прячется
+    property var barVisible: ({}) // имя экрана → бар виден по режиму: OSD встаёт под бар, только когда он занимает место
+    property bool scrollLayout: false
+    property bool centeredOne: false
+    readonly property bool smartOK: scrollLayout && centeredOne
+    function queryLayout() { qLayout.running = true; qCenter.running = true; }
+    Process {
+        id: qLayout
+        command: ["hyprctl", "getoption", "general:layout", "-j"]
+        stdout: StdioCollector { onStreamFinished: root.scrollLayout = (JSON.parse(text || "{}").str ?? "") === "scrolling" }
+    }
+    Process {
+        id: qCenter
+        command: ["hyprctl", "getoption", "scrolling:fullscreen_on_one_column", "-j"]
+        stdout: StdioCollector { onStreamFinished: root.centeredOne = (JSON.parse(text || "{}").bool ?? true) === false }
+    }
+    Component.onCompleted: queryLayout()
+    Connections {
+        target: Hyprland
+        function onRawEvent(e) { if (e.name === "configreloaded") root.queryLayout(); }
+    }
+
     // ---- звук ----
     readonly property var sink: Pipewire.defaultAudioSink
     readonly property var mic: Pipewire.defaultAudioSource
@@ -93,6 +118,7 @@ Singleton {
     }
     function toggleAir() { Quickshell.execDetached(["rfkill", air ? "unblock" : "block", "all"]); air = !air; }
     function toggleMic() { if (mic?.audio) mic.audio.muted = !mic.audio.muted; }
+    function toggleMute() { if (sink?.audio) sink.audio.muted = !sink.audio.muted; }
 
     // ---- наушники Nothing / CMF: шумодав и заряд через ./ear (их RFCOMM-протокол). Спрашиваем при открытии быстрых настроек.
     // ponytail: узнаём по имени, как Gadgetbridge; не Nothing — ear не ответит, ear останется null ----

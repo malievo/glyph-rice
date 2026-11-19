@@ -13,13 +13,19 @@ Scope {
     id: root
 
     property var on: null // экран, где открыта
-    function toggle() { on = on ? null : Quickshell.screens.find(s => s.name === Hyprland.focusedMonitor?.name) ?? Quickshell.screens[0]; }
+    property bool keyed: false // открыта с клавиатуры (Super) — бар выезжает вместе с ней
+    function toggle() {
+        on = on ? null : Quickshell.screens.find(s => s.name === Hyprland.focusedMonitor?.name) ?? Quickshell.screens[0];
+        if (on !== null) keyed = true;
+    }
+    onOnChanged: if (root.on === null) root.keyed = false
 
     readonly property var ids: Theme.state.deck.filter(id => Theme.decks.includes(id))
     readonly property int h: 232 // высота секций в пикселях макета
 
     // открыта — подробный опрос (detailed ставит Home по deckOpen) и процессы с частотой
     Binding { target: Sys; property: "deckOpen"; value: root.on !== null }
+    Binding { target: Sys; property: "deckKeyed"; value: root.on !== null && root.keyed }
     Binding { target: SysStats; property: "perf"; value: root.on !== null }
 
     SystemClock { id: clock; precision: SystemClock.Minutes }
