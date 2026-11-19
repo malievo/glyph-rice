@@ -42,14 +42,16 @@ PanelWindow {
     // ---- открытие: сам себе анимация (у слоёв glyph в hypr no_anim). Раздел помнится между открытиями ----
     property bool shown: false
     property bool deep: false // расширенные: те же 12 слов слева, справа — свиток раздела
+    readonly property bool zones: Sys.zoneEdit // полноэкранный редактор зон поверх всего
     property real t: shown ? 1 : 0
     Behavior on t { NumberAnimation { duration: Theme.t; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.glide } }
     function open() {
         pickMon = Hyprland.focusedMonitor?.name ?? "";
+        Sys.zoneEdit = false;
         shown = true;
         stage.forceActiveFocus();
     }
-    function close() { shown = false; deep = false; }
+    function close() { shown = false; deep = false; Sys.zoneEdit = false; }
     function toggle() { shown ? close() : open(); }
     function go(i) {
         sel = (i + sections.length) % sections.length;
@@ -166,9 +168,14 @@ PanelWindow {
 
     Stage {
         id: stage
-        opacity: root.t
+        opacity: root.zones ? 0 : root.t
         focus: true
         Keys.onPressed: e => {
+            if (root.zones) {
+                if (e.key === Qt.Key_Escape) { Sys.zoneEdit = false; stage.forceActiveFocus(); }
+                e.accepted = true;
+                return;
+            }
             if (e.key === Qt.Key_Up || e.key === Qt.Key_K) root.go(root.sel - 1);
             else if (e.key === Qt.Key_Down || e.key === Qt.Key_J) root.go(root.sel + 1);
             else if (e.key === Qt.Key_Right && stage.activeFocus) stage.nextItemInFocusChain(true)?.forceActiveFocus();
@@ -1472,6 +1479,16 @@ PanelWindow {
                 Qt.callLater(home.land, tile.modelData.i, p);
             }
         }
+    }
+
+    // полноэкранный редактор зон края: обои без виджетов и баров, ручки по всей высоте слева
+    Zones {
+        anchors.fill: parent
+        visible: root.zones
+        enabled: root.zones
+        screen: Quickshell.screens.find(s => s.name === root.mon) ?? Quickshell.screens[0]
+        monName: root.mon
+        onDone: { Sys.zoneEdit = false; stage.forceActiveFocus(); }
     }
 
     // метка простоя: ножка до шкалы, число Doto и имя. Тянуть вдоль шкалы, ←→ — по минуте; правее 60 — never (0).

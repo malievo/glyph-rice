@@ -11,34 +11,8 @@ DeepPage {
     caption: "bar · advanced · geometry, hold and auto-hide"
 
     readonly property bool zoneOK: Theme.state.barAt !== "top" && Sys.scrollLayout
-    readonly property int scrH: Quickshell.screens[0]?.height ?? 1440
     readonly property int zoneTopPx: Theme.state.barReveal === "default" ? 150 : Theme.state.barZoneTop
     readonly property int zoneBottomPx: Theme.state.barReveal === "default" ? 150 : Theme.state.barZoneBottom
-    readonly property int minMid: 240
-    readonly property int step: 10
-    function snap(v) { return Math.round(v / step) * step }
-    function zoneMax(side) {
-        return Theme.state.barZoneSync ? (scrH - minMid) / 2
-            : side === "top" ? scrH - barDeep.zoneBottomPx - minMid
-            : scrH - barDeep.zoneTopPx - minMid;
-    }
-    function setZone(side, v) {
-        const z = Math.min(zoneMax(side), snap(Math.max(0, v)));
-        Theme.state.barReveal = "custom";
-        if (Theme.state.barZoneSync) {
-            Theme.state.barZoneTop = z;
-            Theme.state.barZoneBottom = z;
-        } else if (side === "top") Theme.state.barZoneTop = z;
-        else Theme.state.barZoneBottom = z;
-    }
-
-    // старые пер-пиксельные значения — к шагу ручек
-    Component.onCompleted: if (Theme.state.barReveal === "custom") {
-        const t = snap(Theme.state.barZoneTop);
-        const b = snap(Theme.state.barZoneBottom);
-        if (t !== Theme.state.barZoneTop) Theme.state.barZoneTop = t;
-        if (b !== Theme.state.barZoneBottom) Theme.state.barZoneBottom = b;
-    }
 
     Item {
         width: 560
@@ -136,148 +110,42 @@ DeepPage {
     Item {
         visible: barDeep.zoneOK
         width: parent.width
-        height: 372
+        height: 92
+
+        Column {
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: 8
+            Lb { text: `top · ${barDeep.zoneTopPx} px`; px: 10; color: Theme.grey }
+            Lb { text: `bottom · ${barDeep.zoneBottomPx} px`; px: 10; color: Theme.grey }
+            Lb { visible: Theme.state.barZoneSync; text: "sync on"; px: 10; color: Theme.mute }
+        }
 
         Rectangle {
-            id: scr
-            width: 220
-            height: 320
-            radius: 18
-            color: Theme.bg
-            border { width: 1; color: Theme.s3 }
-            readonly property real k: 292 / barDeep.scrH
-            readonly property bool edge: Theme.state.barReveal === "edge"
-
-            Image {
+            id: edit
+            visible: Theme.state.barReveal !== "edge"
+            anchors.verticalCenter: parent.verticalCenter
+            x: 220
+            width: 240
+            height: 64
+            radius: Theme.corner(32)
+            color: editMa.containsMouse || activeFocus ? Theme.s3 : Theme.s2
+            border { width: activeFocus ? 1 : 0; color: Theme.fg }
+            activeFocusOnTab: true
+            Keys.onPressed: e => {
+                if (e.key !== Qt.Key_Return && e.key !== Qt.Key_Enter && e.key !== Qt.Key_Space) return;
+                Sys.zoneEdit = true;
+                e.accepted = true;
+            }
+            Lb { anchors.centerIn: parent; text: "edit zones"; px: 10; color: edit.activeFocus || editMa.containsMouse ? Theme.fg : Theme.grey }
+            MouseArea {
+                id: editMa
                 anchors.fill: parent
-                anchors.margins: 10
-                fillMode: Image.Tile
-                source: "data:image/svg+xml," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><circle cx="8" cy="8" r="1" fill="#${Theme.hex(Theme.s2)}"/></svg>`)
-            }
-
-            // сама полоска и зоны показа
-            Rectangle { x: 14; y: 14; width: 8; height: 292; radius: 4; color: Theme.s3; opacity: scr.edge ? 0.4 : 1 }
-            Rectangle {
-                visible: scr.edge
-                x: 14; y: 14; width: 8; height: 292; radius: 4; color: Theme.fg; opacity: 0.85
-            }
-            Rectangle {
-                visible: !scr.edge
-                x: 14; y: 14; width: 8; radius: 4
-                height: Math.max(0, Math.min(292, barDeep.zoneTopPx * scr.k))
-                color: Theme.fg; opacity: 0.85
-            }
-            Rectangle {
-                visible: !scr.edge
-                x: 14; y: 14 + 292 - height; width: 8; radius: 4
-                height: Math.max(0, Math.min(292, barDeep.zoneBottomPx * scr.k))
-                color: Theme.fg; opacity: 0.85
-            }
-
-            // колесо по всей белой зоне: верх — вниз растит, низ — вверх растит
-            MouseArea {
-                visible: !scr.edge
-                x: 4; y: 14; width: 32
-                height: Math.max(0, Math.min(292, barDeep.zoneTopPx * scr.k))
-                acceptedButtons: Qt.NoButton
-                onWheel: w => {
-                    const d = w.angleDelta.y || w.pixelDelta.y;
-                    if (!d) return;
-                    barDeep.setZone("top", barDeep.zoneTopPx + (d > 0 ? -barDeep.step : barDeep.step));
-                    w.accepted = true;
-                }
-            }
-            MouseArea {
-                visible: !scr.edge
-                x: 4; y: 14 + 292 - height; width: 32
-                height: Math.max(0, Math.min(292, barDeep.zoneBottomPx * scr.k))
-                acceptedButtons: Qt.NoButton
-                onWheel: w => {
-                    const d = w.angleDelta.y || w.pixelDelta.y;
-                    if (!d) return;
-                    barDeep.setZone("bottom", barDeep.zoneBottomPx + (d > 0 ? barDeep.step : -barDeep.step));
-                    w.accepted = true;
-                }
-            }
-
-            // ручки зон: тянуть — режим custom, значение меняется; захват шире линии
-            Rectangle {
-                visible: !scr.edge
-                x: 0; y: 14 + Math.min(292, barDeep.zoneTopPx * scr.k) - 10
-                width: 36; height: 20; radius: 10
-                color: "transparent"
-                Rectangle { anchors.centerIn: parent; width: 28; height: 4; radius: 2; color: Theme.fg }
-                MouseArea {
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    preventStealing: true
-                    cursorShape: Qt.SizeVerCursor
-                    property real start: 0
-                    property real y0: 0
-                    onPressed: m => { start = barDeep.zoneTopPx; y0 = m.y }
-                    onPositionChanged: m => { if (pressed) barDeep.setZone("top", start + (m.y - y0) / scr.k) }
-                    onWheel: w => {
-                        const d = w.angleDelta.y || w.pixelDelta.y;
-                        if (!d) return;
-                        barDeep.setZone("top", barDeep.zoneTopPx + (d > 0 ? -barDeep.step : barDeep.step));
-                        w.accepted = true;
-                    }
-                }
-            }
-            Rectangle {
-                visible: !scr.edge
-                x: 0; y: 14 + 292 - Math.min(292, barDeep.zoneBottomPx * scr.k) - 10
-                width: 36; height: 20; radius: 10
-                color: "transparent"
-                Rectangle { anchors.centerIn: parent; width: 28; height: 4; radius: 2; color: Theme.fg }
-                MouseArea {
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    preventStealing: true
-                    cursorShape: Qt.SizeVerCursor
-                    property real start: 0
-                    property real y0: 0
-                    onPressed: m => { start = barDeep.zoneBottomPx; y0 = m.y }
-                    onPositionChanged: m => { if (pressed) barDeep.setZone("bottom", start - (m.y - y0) / scr.k) }
-                    onWheel: w => {
-                        const d = w.angleDelta.y || w.pixelDelta.y;
-                        if (!d) return;
-                        barDeep.setZone("bottom", barDeep.zoneBottomPx + (d > 0 ? barDeep.step : -barDeep.step));
-                        w.accepted = true;
-                    }
-                }
-            }
-
-            Lb { anchors.centerIn: parent; text: "scroll"; px: 10; color: Theme.mute }
-        }
-
-        Lb {
-            visible: !scr.edge
-            x: 236; y: 12
-            text: `top · ${Math.round(barDeep.zoneTopPx)} px`; px: 10; color: Theme.grey
-        }
-        Lb {
-            visible: !scr.edge
-            x: 236; y: 298
-            text: `bottom · ${Math.round(barDeep.zoneBottomPx)} px`; px: 10; color: Theme.grey
-        }
-        Lb { visible: scr.edge; x: 236; y: 12; text: "full edge"; px: 10; color: Theme.grey }
-
-        Toggle {
-            visible: !scr.edge
-            x: 236; y: 150; width: 200
-            text: "sync zones"
-            on: Theme.state.barZoneSync
-            onFlip: {
-                Theme.state.barZoneSync = !Theme.state.barZoneSync;
-                if (Theme.state.barZoneSync) {
-                    const v = Math.min((barDeep.scrH - barDeep.minMid) / 2,
-                                       barDeep.snap((barDeep.zoneTopPx + barDeep.zoneBottomPx) / 2));
-                    Theme.state.barZoneTop = v;
-                    Theme.state.barZoneBottom = v;
-                }
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: Sys.zoneEdit = true
             }
         }
     }
-    Lb { visible: barDeep.zoneOK; topPadding: 10; text: "top and bottom reveal the bar · the middle stays with the lane · drag a handle or wheel over a zone · steps of 10 px"; px: 10 }
+    Lb { visible: barDeep.zoneOK && Theme.state.barReveal !== "edge"; topPadding: 8; text: "opens the full-screen editor over your wallpaper · drag or wheel · steps of 10 px"; px: 10 }
+    Lb { visible: barDeep.zoneOK && Theme.state.barReveal === "edge"; topPadding: 8; text: "edge uses the whole side — pick default or custom to edit zones"; px: 10 }
 }
