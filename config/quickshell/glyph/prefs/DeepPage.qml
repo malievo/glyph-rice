@@ -10,6 +10,7 @@ FocusScope {
 
     property string caption
     property string section // имя раздела prefs — для пустой страницы: "input · advanced"
+    signal editZones // страница просит полноэкранный редактор зон; ловит Prefs
     default property alias rows: col.data
 
     readonly property alias flick: flick

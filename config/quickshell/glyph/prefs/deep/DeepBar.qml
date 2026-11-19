@@ -133,7 +133,7 @@ DeepPage {
             activeFocusOnTab: true
             Keys.onPressed: e => {
                 if (e.key !== Qt.Key_Return && e.key !== Qt.Key_Enter && e.key !== Qt.Key_Space) return;
-                Sys.zoneEdit = true;
+                barDeep.editZones();
                 e.accepted = true;
             }
             Lb { anchors.centerIn: parent; text: "edit zones"; px: 10; color: edit.activeFocus || editMa.containsMouse ? Theme.fg : Theme.grey }
@@ -142,7 +142,7 @@ DeepPage {
                 anchors.fill: parent
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
-                onClicked: Sys.zoneEdit = true
+                onClicked: barDeep.editZones()
             }
         }
     }

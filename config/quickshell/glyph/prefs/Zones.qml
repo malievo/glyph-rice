@@ -5,12 +5,22 @@ import qs.components
 
 // полноэкранный редактор зон края: обои без виджетов и баров, ручки по всей высоте слева.
 // Значения — px монитора; шаг 10; верх — колесо вниз растит, низ — колесо вверх растит.
-Item {
+FocusScope {
     id: root
 
     property var screen
     property string monName
     signal done
+
+    focus: visible
+    Keys.onPressed: e => {
+        if (e.key === Qt.Key_Escape || e.key === Qt.Key_Return || e.key === Qt.Key_Enter) { root.done(); e.accepted = true; }
+        else if (e.key === Qt.Key_Space) {
+            Theme.state.barZoneSync = !Theme.state.barZoneSync;
+            if (Theme.state.barZoneSync) root.equalize();
+            e.accepted = true;
+        }
+    }
 
     readonly property var mon: screen ?? Quickshell.screens[0]
     readonly property int scrH: mon?.height ?? 1440
@@ -42,11 +52,15 @@ Item {
         Theme.state.barZoneBottom = v;
     }
 
-    onVisibleChanged: if (visible && Theme.state.barReveal === "custom") {
-        const t = snap(Theme.state.barZoneTop);
-        const b = snap(Theme.state.barZoneBottom);
-        if (t !== Theme.state.barZoneTop) Theme.state.barZoneTop = t;
-        if (b !== Theme.state.barZoneBottom) Theme.state.barZoneBottom = b;
+    onVisibleChanged: {
+        if (!visible) return;
+        Qt.callLater(root.forceActiveFocus);
+        if (Theme.state.barReveal === "custom") {
+            const t = snap(Theme.state.barZoneTop);
+            const b = snap(Theme.state.barZoneBottom);
+            if (t !== Theme.state.barZoneTop) Theme.state.barZoneTop = t;
+            if (b !== Theme.state.barZoneBottom) Theme.state.barZoneBottom = b;
+        }
     }
 
     // ---- обои: та же подложка, что у дома, без виджетов ----
@@ -174,12 +188,20 @@ Item {
             }
         }
 
+        Lb { x: 20; y: 170; text: "space · sync"; px: 10; color: Theme.grey }
+
         Rectangle {
             id: doneBtn
             x: 20; y: 188; width: 150; height: 52; radius: 26
             readonly property bool hot: doneMa.containsMouse
             color: Theme.fg
-            border { width: doneBtn.hot ? 2 : 0; color: Theme.ink }
+            activeFocusOnTab: true
+            border { width: doneBtn.hot || doneBtn.activeFocus ? 2 : 0; color: Theme.ink }
+            Keys.onPressed: e => {
+                if (e.key !== Qt.Key_Return && e.key !== Qt.Key_Enter && e.key !== Qt.Key_Space) return;
+                root.done();
+                e.accepted = true;
+            }
             Lb { anchors.centerIn: parent; text: "done"; px: 12; color: Theme.ink }
             MouseArea {
                 id: doneMa
@@ -189,6 +211,6 @@ Item {
                 onClicked: root.done()
             }
         }
-        Lb { x: 188; y: 204; text: "esc"; px: 10; color: Theme.grey }
+        Lb { x: 188; y: 204; text: "esc / enter"; px: 10; color: Theme.grey }
     }
 }
