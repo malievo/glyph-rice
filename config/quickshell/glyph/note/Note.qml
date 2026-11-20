@@ -305,7 +305,10 @@ PanelWindow {
                         if (text.length && !root.drawer) root.drawer = true;
                     }
                     Keys.onPressed: e => {
-                        if (e.key === Qt.Key_Escape) {
+                        const ctrl = (e.modifiers & Qt.ControlModifier) !== 0;
+                        if (ctrl && e.key === Qt.Key_H) {
+                            root.history();
+                        } else if (e.key === Qt.Key_Escape) {
                             if (input.text) input.text = "";
                             else { root.drawer = false; ed.forceActiveFocus(); }
                         } else if (e.key === Qt.Key_Return || e.key === Qt.Key_Enter) {
@@ -460,7 +463,10 @@ PanelWindow {
                     }
                     delegate: Note {}
                     Keys.onPressed: e => {
-                        if (e.key === Qt.Key_Up) {
+                        const ctrl = (e.modifiers & Qt.ControlModifier) !== 0;
+                        if (ctrl && e.key === Qt.Key_H) {
+                            root.history();
+                        } else if (e.key === Qt.Key_Up) {
                             root.sel = Math.max(0, root.sel - 1);
                         } else if (e.key === Qt.Key_Down) {
                             root.sel = Math.min(root.view.length - 1, root.sel + 1);
