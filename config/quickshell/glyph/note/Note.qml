@@ -283,7 +283,14 @@ PanelWindow {
                     cursorDelegate: Rectangle {
                         width: 2
                         color: Theme.accent
-                        Timer { running: input.activeFocus; interval: 520; repeat: true; onTriggered: parent.opacity = 1 - parent.opacity }
+                        visible: input.activeFocus
+                        Timer {
+                            running: input.activeFocus
+                            interval: 520
+                            repeat: true
+                            onRunningChanged: if (running) parent.opacity = 1
+                            onTriggered: parent.opacity = 1 - parent.opacity
+                        }
                     }
                     Text {
                         visible: !input.text
@@ -371,8 +378,17 @@ PanelWindow {
                 cursorDelegate: Rectangle {
                     width: 2
                     color: Theme.accent
-                    Timer { running: ed.activeFocus; interval: 520; repeat: true; onTriggered: parent.opacity = 1 - parent.opacity }
+                    visible: ed.activeFocus
+                    Timer {
+                        running: ed.activeFocus
+                        interval: 520
+                        repeat: true
+                        onRunningChanged: if (running) parent.opacity = 1
+                        onTriggered: parent.opacity = 1 - parent.opacity
+                    }
                 }
+                // клик по редактору — история закрывается и фокус возвращается к тексту
+                onActiveFocusChanged: if (activeFocus && root.drawer) root.drawer = false
                 Keys.onPressed: e => {
                     const ctrl = (e.modifiers & Qt.ControlModifier) !== 0;
                     if (e.key === Qt.Key_Escape) {
