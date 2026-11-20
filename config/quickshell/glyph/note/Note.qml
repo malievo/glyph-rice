@@ -9,13 +9,18 @@ import qs.components
 // под ней редактор почти на всю карточку; notes плавно выкатывает историю из-под правого края.
 // Поиск фильтрует заметки по заголовку и содержимому (grep), набор текста сам открывает историю.
 // История листается с клавиатуры (Ctrl+H — открыть, ↑↓, ↵, Del, Tab — поиск), в строке при наведении —
-// копировать и удалить, между заметками — тихие подписи дат (today, yesterday…).
-// Заметки — файлы *.md в ~/Документы/Заметки (имя — дата). Текст пишется сам через 0.6 с паузы,
-// открытие показывает последнюю заметку по mtime, Ctrl+Space — новая.
+// копировать и удалить (в корзину), между заметками — тихие подписи дат (today, yesterday…).
+// Заметки — файлы *.md в документах пользователя (Documents/Notes, у русской локали ~/Документы/Notes),
+// имя файла — дата. Текст пишется сам через 0.6 с паузы, открытие показывает последнюю заметку по mtime,
+// Ctrl+Space — новая.
 PanelWindow {
     id: root
 
-    readonly property string dir: (Quickshell.env("HOME") || "") + "/Документы/Заметки"
+    // заметки — обычные md-файлы в документах пользователя (xdg-user-dir; у русской локали это ~/Документы),
+    // без xdg-user-dir — ~/Documents/Notes
+    property string docs: ""
+    property bool ready: false
+    readonly property string dir: (docs || (Quickshell.env("HOME") || "") + "/Documents") + "/Notes"
     property var notes: []      // [{ mtime, name, title }], новые сверху
     property var hits: []       // имена файлов, где поиск нашёл текст (grep)
     property string query: ""
@@ -43,6 +48,7 @@ PanelWindow {
     function close() { saveNow(); shown = false; drawer = false; input.text = ""; }
     function toggle() { shown ? close() : open(); }
     function refresh() {
+        if (!ready) return;
         lister.running = true;
         if (query !== "") searchTimer.restart();
     }
@@ -87,6 +93,7 @@ PanelWindow {
         ed.forceActiveFocus();
     }
 
+    // удаление в корзину: gio trash (файл можно вернуть из файлового менеджера), без gio — в ~/.local/share/Trash/files
     function burn(name) {
         if (dir + "/" + name === cur) {
             cur = "";
@@ -94,7 +101,10 @@ PanelWindow {
             ed.text = "";
             loader = false;
         }
-        rm.command = ["rm", "-f", "--", dir + "/" + name];
+        rm.command = ["sh", "-c",
+            'if command -v gio >/dev/null 2>&1; then gio trash -- "$1" 2>/dev/null; else ' +
+            'd="$HOME/.local/share/Trash/files"; mkdir -p -- "$d" && mv -f -- "$1" "$d/"; fi',
+            "sh", dir + "/" + name];
         rm.running = true;
     }
 
@@ -141,6 +151,21 @@ PanelWindow {
         rows.positionViewAtIndex(sel, ListView.Contain);
     }
     onSelChanged: rows.positionViewAtIndex(sel, ListView.Contain)
+
+    // каталог документов: xdg-user-dir, без него — ~/Documents (таймер — страховка, если команды нет)
+    Process {
+        id: xdg
+        command: ["xdg-user-dir", "DOCUMENTS"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const t = text.trim();
+                if (t && t !== Quickshell.env("HOME")) root.docs = t;
+                root.ready = true;
+                root.refresh();
+            }
+        }
+    }
+    Timer { interval: 700; running: !root.ready; onTriggered: { root.ready = true; root.refresh(); } }
 
     // история: mtime, имя файла, первая строка — одной строкой, новые сверху
     Process {
@@ -234,7 +259,7 @@ PanelWindow {
     WlrLayershell.namespace: "glyph-note"
 
     onShownChanged: if (shown) ed.forceActiveFocus()
-    Component.onCompleted: refresh()
+    Component.onCompleted: xdg.running = true
 
     Rectangle {
         anchors.fill: parent
