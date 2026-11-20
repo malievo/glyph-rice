@@ -104,8 +104,9 @@ PanelWindow {
 
     // ---- автоскрытие (Theme.state.barMode): always — как обычно, с местом под бар; hidden — прячется, когда на этом
     // столе есть окна; smart — когда лента заполнена (fullscreen/maximized, колонка во всю ширину или две плитки).
-    // Пока бар виден по режиму — он держит место под собой; скрыт — окна растягиваются; выезд по наведению и с deck
-    // ложится поверх, без рефлоу ----
+    // Пока бар виден по режиму — он держит место под собой; исключение — вертикальный auto-бар с одним
+    // центрированным окном: бокового поля хватает, окно остаётся по центру. Скрыт — окна растягиваются;
+    // выезд по наведению и с deck ложится поверх, без рефлоу ----
     readonly property string mode: Theme.state.barMode
     readonly property bool auto: mode !== "always"
     readonly property bool full: mon?.activeWorkspace?.hasFullscreen ?? false
@@ -135,6 +136,17 @@ PanelWindow {
     readonly property bool wide: root.tiles.length === 1
         && (root.normal[root.tiles[0].address] ?? root.geo[root.tiles[0].address] ?? root.tiles[0].lastIpcObject?.size?.[0] ?? 0)
             >= 0.9 * (screen?.width ?? 1920) * (screen?.devicePixelRatio ?? 1)
+    readonly property bool floatingWin: root.wins.some(t => t.lastIpcObject?.floating ?? false)
+    // одно окно ленты стоит по центру и оставляет поля по бокам; если полоса уже бара, место можно не держать
+    readonly property bool sideFree: {
+        if (!root.vert) return false;
+        if (root.tiles.length === 0) return true;
+        if (root.tiles.length !== 1 || !root.screen) return false;
+        const w = root.normal[root.tiles[0].address] ?? root.geo[root.tiles[0].address] ?? root.tiles[0].lastIpcObject?.size?.[0] ?? 0;
+        if (w <= 0) return false;
+        return (root.screen.width - w / (root.screen.devicePixelRatio || 1)) / 2 >= root.width;
+    }
+    readonly property bool keepSpace: !root.auto || !root.vert || root.isSpecial || root.floatingWin || !root.sideFree
     readonly property bool wanted: !root.auto || (root.mode === "hidden" || !Sys.smartOK ? root.wins.length === 0
         : !root.full && !root.wide && root.tiles.length <= 1)
     property bool hovered: false
@@ -157,7 +169,7 @@ PanelWindow {
         Region { x: 0; y: 0; width: root.hitW; height: root.hitH1 }
         Region { x: 0; y: root.height - root.hitH2; width: root.hitW; height: root.hitH2 }
     }
-    exclusionMode: root.wanted ? ExclusionMode.Auto : ExclusionMode.Ignore
+    exclusionMode: root.wanted && root.keepSpace ? ExclusionMode.Auto : ExclusionMode.Ignore
     // бар занимает место по режиму — OSD встаёт под него; peek/панели сюда не входят
     function syncBarVisible() {
         const m = Object.assign({}, Sys.barVisible);
