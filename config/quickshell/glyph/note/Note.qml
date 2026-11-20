@@ -5,8 +5,9 @@ import Quickshell.Wayland
 import qs
 import qs.components
 
-// быстрый блокнот: панель Win+T в семье Win+V, но без тулбара — редактор на всю карточку.
-// Справа сверху пилюли «+ new» и «notes»; notes плавно выкатывает историю из-под правого края.
+// быстрый блокнот: панель Win+T в семье Win+V. Сверху пилюля поиска с пилюлями «+ new» и «notes»,
+// под ней редактор почти на всю карточку; notes плавно выкатывает историю из-под правого края.
+// Поиск фильтрует заметки по заголовку и содержимому (grep), набор текста сам открывает историю.
 // Заметки — файлы *.md в ~/Документы/Заметки (имя — дата). Текст пишется сам через 0.6 с паузы,
 // открытие показывает последнюю заметку по mtime, Ctrl+Space — новая.
 PanelWindow {
@@ -14,10 +15,16 @@ PanelWindow {
 
     readonly property string dir: (Quickshell.env("HOME") || "") + "/Документы/Заметки"
     property var notes: []      // [{ mtime, name, title }], новые сверху
+    property var hits: []       // имена файлов, где поиск нашёл текст (grep)
+    property string query: ""
     property string cur: ""     // файл открытой заметки; пусто — новая, ещё не сохранённая
     property bool loader: false // текст выставлен программно (загрузка) — автосейв молчит
     property bool booted: false
     property real flash: 0      // вспышка «saved»
+
+    readonly property var view: query === "" ? notes : notes.filter(n =>
+        n.title.toLowerCase().includes(query.toLowerCase()) || hits.includes(n.name))
+    readonly property int words: ed.text.trim() ? ed.text.trim().split(/\s+/).length : 0
 
     property bool shown: false
     property bool drawer: false
@@ -28,9 +35,12 @@ PanelWindow {
     Behavior on flash { NumberAnimation { duration: 400 } }
 
     function open() { shown = true; refresh(); }
-    function close() { saveNow(); shown = false; drawer = false; }
+    function close() { saveNow(); shown = false; drawer = false; input.text = ""; }
     function toggle() { shown ? close() : open(); }
-    function refresh() { lister.running = true; }
+    function refresh() {
+        lister.running = true;
+        if (query !== "") searchTimer.restart();
+    }
 
     // атомарно, текст — в stdin: ни argv, ни кавычек; новое имя — дата
     function saveNow() {
@@ -52,6 +62,7 @@ PanelWindow {
         read.command = ["cat", "--", cur];
         read.running = true;
         drawer = false;
+        input.text = "";
     }
 
     function fresh() {
@@ -61,6 +72,7 @@ PanelWindow {
         ed.text = "";
         loader = false;
         drawer = false;
+        input.text = "";
         ed.forceActiveFocus();
     }
 
@@ -106,6 +118,23 @@ PanelWindow {
                     else ed.forceActiveFocus();
                 }
             }
+        }
+    }
+
+    // поиск по содержимому: имена файлов с совпадением; заголовки фильтруются сразу в view
+    Process {
+        id: grep
+        stdout: StdioCollector {
+            onStreamFinished: root.hits = text.split("\n").filter(l => l.endsWith(".md"))
+        }
+    }
+    Timer {
+        id: searchTimer
+        interval: 150
+        onTriggered: {
+            if (root.query === "") { root.hits = []; return; }
+            grep.command = ["sh", "-c", 'cd "$1" || exit 0; grep -ilF -e "$2" -- *.md 2>/dev/null', "sh", root.dir, root.query];
+            grep.running = true;
         }
     }
 
@@ -164,8 +193,8 @@ PanelWindow {
             id: card
             x: (stage.width - width) / 2
             y: 140 + 24 * (1 - root.t)
-            width: 1120
-            height: Math.min(stage.height - 280, 760)
+            width: 1008
+            height: Math.min(stage.height - 280, 684)
             opacity: root.t
             radius: Theme.corner(44)
             color: Theme.s1
@@ -174,9 +203,96 @@ PanelWindow {
 
             MouseArea { anchors.fill: parent }
 
+            // пилюля поиска как у Win+V: лупа, поле, × очистки и две пилюли в одной строке
+            Rectangle {
+                id: pill
+                x: 30
+                y: 26
+                width: parent.width - 60
+                height: 62
+                radius: 31
+                color: Theme.s2
+
+                Icon { id: lens; x: 22; anchors.verticalCenter: parent.verticalCenter; text: "\u{F0349}"; color: Theme.grey; font.pixelSize: 20 }
+
+                TextInput {
+                    id: input
+                    anchors { left: lens.right; leftMargin: 14; right: clearBtn.left; rightMargin: 10; verticalCenter: parent.verticalCenter }
+                    font { family: Theme.ui; pixelSize: 20 }
+                    color: Theme.fg
+                    selectionColor: Theme.s3
+                    selectedTextColor: Theme.fg
+                    clip: true
+                    cursorDelegate: Rectangle {
+                        width: 2
+                        color: Theme.accent
+                        Timer { running: input.activeFocus; interval: 520; repeat: true; onTriggered: parent.opacity = 1 - parent.opacity }
+                    }
+                    Text {
+                        visible: !input.text
+                        x: 2
+                        text: "Search notes"
+                        font: input.font
+                        color: Theme.mute
+                    }
+                    onTextChanged: {
+                        root.query = text;
+                        if (text.length && !root.drawer) root.drawer = true;
+                    }
+                    Keys.onPressed: e => {
+                        if (e.key === Qt.Key_Escape) {
+                            if (input.text) input.text = "";
+                            else ed.forceActiveFocus();
+                        } else if (e.key === Qt.Key_Return || e.key === Qt.Key_Enter) {
+                            if (root.view.length) root.load(root.view[0].name);
+                        } else return;
+                        e.accepted = true;
+                    }
+                }
+
+                Rectangle {
+                    id: clearBtn
+                    anchors { right: chips.left; rightMargin: 10; verticalCenter: parent.verticalCenter }
+                    width: 34
+                    height: 34
+                    radius: 17
+                    visible: input.text.length > 0
+                    color: clearHov.hovered ? Theme.fg : "transparent"
+                    Text {
+                        anchors.centerIn: parent
+                        text: "×"
+                        font { family: Theme.ui; pixelSize: 20; weight: Font.Medium }
+                        color: clearHov.hovered ? Theme.ink : Theme.grey
+                    }
+                    TapHandler { onTapped: { input.text = ""; input.forceActiveFocus(); } }
+                    HoverHandler { id: clearHov; cursorShape: Qt.PointingHandCursor }
+                }
+
+                Row {
+                    id: chips
+                    anchors { right: parent.right; rightMargin: 10; verticalCenter: parent.verticalCenter }
+                    spacing: 6
+                    component Chip: Rectangle {
+                        id: c
+                        property string label
+                        signal tapped
+                        width: lab.implicitWidth + 30
+                        height: 42
+                        radius: 21
+                        color: hov.hovered ? Theme.fg : Theme.s3
+                        Behavior on color { ColorAnimation { duration: 150 } }
+                        Lb { id: lab; anchors.centerIn: parent; text: c.label; px: 10; color: hov.hovered ? Theme.ink : Theme.grey }
+                        TapHandler { onTapped: c.tapped() }
+                        HoverHandler { id: hov; cursorShape: Qt.PointingHandCursor }
+                    }
+                    Chip { label: "+ new"; onTapped: root.fresh() }
+                    Chip { label: "notes"; onTapped: root.drawer = !root.drawer }
+                }
+            }
+
             TextEdit {
                 id: ed
-                anchors { fill: parent; leftMargin: 46; rightMargin: 46; topMargin: 92; bottomMargin: 44 }
+                anchors { fill: parent; leftMargin: 42; rightMargin: 42; topMargin: 114; bottomMargin: 64 }
                 focus: true
                 textFormat: TextEdit.PlainText
                 wrapMode: TextEdit.WrapAtWordBoundaryOrAnywhere
@@ -209,8 +325,8 @@ PanelWindow {
             }
 
             Text {
-                x: 48
-                y: 96
+                x: 44
+                y: 116
                 visible: ed.text.length === 0
                 text: "start typing…"
                 textFormat: Text.PlainText
@@ -218,57 +334,42 @@ PanelWindow {
                 color: Theme.mute
             }
 
-            // пилюли: новая заметка, история
-            Row {
-                id: chips
-                anchors { top: parent.top; right: parent.right; margins: 20 }
-                spacing: 8
-                z: 4
-                component Chip: Rectangle {
-                    id: c
-                    property string label
-                    signal tapped
-                    width: lab.implicitWidth + 36
-                    height: 38
-                    radius: 19
-                    color: hov.hovered ? Theme.fg : Theme.s2
-                    Behavior on color { ColorAnimation { duration: 150 } }
-                    Lb { id: lab; anchors.centerIn: parent; text: c.label; px: 10; color: hov.hovered ? Theme.ink : Theme.grey }
-                    TapHandler { onTapped: c.tapped() }
-                    HoverHandler { id: hov; cursorShape: Qt.PointingHandCursor }
-                }
-                Chip { label: "+ new"; onTapped: root.fresh() }
-                Chip { label: "notes"; onTapped: root.drawer = !root.drawer }
+            // сколько слов в заметке — мелкая деталь внизу справа, под редактором
+            Lb {
+                anchors { right: parent.right; rightMargin: 42; bottom: parent.bottom; bottomMargin: 22 }
+                text: root.words === 1 ? "1 word" : root.words + " words"
+                color: Theme.mute
+                opacity: root.words ? 1 : 0
             }
 
             // история: выкатывается из-под правого края, карточка её подрезает
             Rectangle {
                 id: sheet
-                width: 380
-                y: 76
-                height: parent.height - 76 - 18
+                width: 360
+                y: 110
+                height: parent.height - 110 - 18
                 x: parent.width - 18 - width + (width + 30) * (1 - root.dt)
                 radius: Theme.corner(40)
                 color: Theme.s2
                 z: 3
 
-                Lb { id: hlab; x: 28; y: 26; text: "notes" }
-                Num { anchors.baseline: hlab.baseline; x: hlab.implicitWidth + 42; text: root.notes.length; font.pixelSize: 26; color: Theme.grey }
+                Lb { id: hlab; x: 28; y: 24; text: "notes" }
+                Num { anchors.baseline: hlab.baseline; x: hlab.implicitWidth + 42; text: root.view.length; font.pixelSize: 26; color: Theme.grey }
 
                 ListView {
                     id: rows
                     anchors { left: parent.left; right: parent.right; top: hlab.bottom; bottom: parent.bottom; margins: 18 }
                     clip: true
                     spacing: 4
-                    model: root.notes
+                    model: root.view
                     boundsBehavior: Flickable.StopAtBounds
                     delegate: Note {}
                 }
 
                 Lb {
-                    visible: root.notes.length === 0
+                    visible: root.view.length === 0
                     anchors.centerIn: parent
-                    text: "no notes yet"
+                    text: root.query ? "no matches" : "no notes yet"
                 }
             }
 
@@ -318,14 +419,21 @@ PanelWindow {
                     }
                 }
 
-                TapHandler { onTapped: root.load(row.modelData.name) }
+                // открытие — только слева от крестика: иначе тап по × ещё и «открывал» заметку
+                // и закрывал историю, а удалённый файл подставлялся в редактор
+                Rectangle {
+                    anchors { left: parent.left; top: parent.top; bottom: parent.bottom; right: tail.left }
+                    color: "transparent"
+                    TapHandler { onTapped: root.load(row.modelData.name) }
+                }
+
                 HoverHandler { id: hov; cursorShape: Qt.PointingHandCursor }
             }
 
             // хинты под карточкой — как у Win+V
             Row {
-                anchors { horizontalCenter: parent.horizontalCenter; top: parent.bottom; topMargin: 26 }
-                spacing: 34
+                anchors { horizontalCenter: parent.horizontalCenter; top: parent.bottom; topMargin: 24 }
+                spacing: 30
                 Lb { text: "ctrl+space new" }
                 Lb { text: "ctrl+s save" }
                 Lb { text: "esc close" }
