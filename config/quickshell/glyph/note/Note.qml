@@ -8,6 +8,8 @@ import qs.components
 // быстрый блокнот: панель Win+T в семье Win+V. Сверху пилюля поиска с пилюлями «+ new» и «notes»,
 // под ней редактор почти на всю карточку; notes плавно выкатывает историю из-под правого края.
 // Поиск фильтрует заметки по заголовку и содержимому (grep), набор текста сам открывает историю.
+// История листается с клавиатуры (Ctrl+H — открыть, ↑↓, ↵, Del, Tab — поиск), в строке при наведении —
+// копировать и удалить, между заметками — тихие подписи дат (today, yesterday…).
 // Заметки — файлы *.md в ~/Документы/Заметки (имя — дата). Текст пишется сам через 0.6 с паузы,
 // открытие показывает последнюю заметку по mtime, Ctrl+Space — новая.
 PanelWindow {
@@ -17,13 +19,16 @@ PanelWindow {
     property var notes: []      // [{ mtime, name, title }], новые сверху
     property var hits: []       // имена файлов, где поиск нашёл текст (grep)
     property string query: ""
+    property int sel: 0         // выбранная строка истории (клавиатура и подсветка)
     property string cur: ""     // файл открытой заметки; пусто — новая, ещё не сохранённая
     property bool loader: false // текст выставлен программно (загрузка) — автосейв молчит
     property bool booted: false
-    property real flash: 0      // вспышка «saved»
+    property real flash: 0      // вспышка «saved» / «copied»
+    property string flashText: "saved"
 
-    readonly property var view: query === "" ? notes : notes.filter(n =>
-        n.title.toLowerCase().includes(query.toLowerCase()) || hits.includes(n.name))
+    readonly property var view: (query === "" ? notes : notes.filter(n =>
+        n.title.toLowerCase().includes(query.toLowerCase()) || hits.includes(n.name)))
+        .map(n => ({ mtime: n.mtime, name: n.name, title: n.title, bucket: bucket(n.mtime) }))
     readonly property int words: ed.text.trim() ? ed.text.trim().split(/\s+/).length : 0
 
     property bool shown: false
@@ -40,6 +45,12 @@ PanelWindow {
     function refresh() {
         lister.running = true;
         if (query !== "") searchTimer.restart();
+    }
+
+    // история: открыть с поиском (Ctrl+H / пилюля notes), повторно — закрыть в редактор
+    function history() {
+        if (drawer) { drawer = false; ed.forceActiveFocus(); }
+        else { drawer = true; input.forceActiveFocus(); }
     }
 
     // атомарно, текст — в stdin: ни argv, ни кавычек; новое имя — дата
@@ -87,6 +98,19 @@ PanelWindow {
         rm.running = true;
     }
 
+    // из строки истории, не открывая: текущая — из буфера редактора (там может быть ещё не сохранённое)
+    function copyNote(name) {
+        flashText = "copied";
+        if (dir + "/" + name === cur) {
+            copyText.payload = ed.text;
+            copyText.stdinEnabled = true;
+            copyText.running = true;
+        } else {
+            copyFile.command = ["sh", "-c", 'cat -- "$1" | wl-copy', "sh", dir + "/" + name];
+            copyFile.running = true;
+        }
+    }
+
     function blink() { flash = 1; flashTimer.restart(); }
 
     function when(ts) {
@@ -94,6 +118,29 @@ PanelWindow {
         return d.toDateString() === now.toDateString()
             ? Qt.formatDateTime(d, "HH:mm") : Qt.formatDateTime(d, "dd.MM HH:mm");
     }
+
+    // тихие группы по датам: заметки отсортированы по mtime, группы идут подряд
+    function bucket(ts) {
+        const d = new Date(ts * 1000), now = new Date();
+        const day = 86400000;
+        const start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+        if (d.getTime() >= start) return "today";
+        if (d.getTime() >= start - day) return "yesterday";
+        if (d.getTime() >= start - 7 * day) return "last week";
+        if (d.getTime() >= start - 30 * day) return "last month";
+        return ">30 days";
+    }
+
+    onDrawerChanged: {
+        if (!drawer) return;
+        if (query === "") sel = Math.max(0, view.findIndex(n => dir + "/" + n.name === cur));
+        rows.positionViewAtIndex(sel, ListView.Contain);
+    }
+    onViewChanged: {
+        sel = Math.max(0, Math.min(sel, view.length - 1));
+        rows.positionViewAtIndex(sel, ListView.Contain);
+    }
+    onSelChanged: rows.positionViewAtIndex(sel, ListView.Contain)
 
     // история: mtime, имя файла, первая строка — одной строкой, новые сверху
     Process {
@@ -162,6 +209,16 @@ PanelWindow {
             if (again) { again = false; root.saveNow(); }
         }
     }
+
+    Process {
+        id: copyText
+        stdinEnabled: true
+        command: ["wl-copy"]
+        property string payload: ""
+        onStarted: { write(payload); stdinEnabled = false; }
+        onExited: root.blink()
+    }
+    Process { id: copyFile; onExited: root.blink() }
 
     Process { id: rm; onExited: root.refresh() }
 
@@ -237,14 +294,23 @@ PanelWindow {
                     }
                     onTextChanged: {
                         root.query = text;
+                        root.sel = 0;
                         if (text.length && !root.drawer) root.drawer = true;
                     }
                     Keys.onPressed: e => {
                         if (e.key === Qt.Key_Escape) {
                             if (input.text) input.text = "";
-                            else ed.forceActiveFocus();
+                            else { root.drawer = false; ed.forceActiveFocus(); }
                         } else if (e.key === Qt.Key_Return || e.key === Qt.Key_Enter) {
-                            if (root.view.length) root.load(root.view[0].name);
+                            if (root.view[root.sel]) root.load(root.view[root.sel].name);
+                        } else if (e.key === Qt.Key_Up) {
+                            root.sel = Math.max(0, root.sel - 1);
+                        } else if (e.key === Qt.Key_Down) {
+                            root.sel = Math.min(root.view.length - 1, root.sel + 1);
+                        } else if (e.key === Qt.Key_Delete && input.text === "") {
+                            if (root.view[root.sel]) root.burn(root.view[root.sel].name);
+                        } else if (e.key === Qt.Key_Tab || e.key === Qt.Key_Backtab) {
+                            rows.forceActiveFocus();
                         } else return;
                         e.accepted = true;
                     }
@@ -286,7 +352,7 @@ PanelWindow {
                         HoverHandler { id: hov; cursorShape: Qt.PointingHandCursor }
                     }
                     Chip { label: "+ new"; onTapped: root.fresh() }
-                    Chip { label: "notes"; onTapped: root.drawer = !root.drawer }
+                    Chip { label: "notes"; onTapped: root.history() }
                 }
             }
 
@@ -316,6 +382,8 @@ PanelWindow {
                         root.fresh();
                     } else if (ctrl && e.key === Qt.Key_S) {
                         root.saveNow();
+                    } else if (ctrl && e.key === Qt.Key_H) {
+                        root.history();
                     } else if (e.key === Qt.Key_Tab) {
                         ed.insert(ed.cursorPosition, "    ");
                     } else return;
@@ -363,7 +431,35 @@ PanelWindow {
                     spacing: 4
                     model: root.view
                     boundsBehavior: Flickable.StopAtBounds
+                    keyNavigationEnabled: false
+                    section.property: "bucket"
+                    section.delegate: Lb {
+                        required property string section
+                        text: section
+                        px: 9
+                        x: 20
+                        topPadding: 12
+                        bottomPadding: 4
+                        color: Theme.mute
+                    }
                     delegate: Note {}
+                    Keys.onPressed: e => {
+                        if (e.key === Qt.Key_Up) {
+                            root.sel = Math.max(0, root.sel - 1);
+                        } else if (e.key === Qt.Key_Down) {
+                            root.sel = Math.min(root.view.length - 1, root.sel + 1);
+                        } else if (e.key === Qt.Key_Return || e.key === Qt.Key_Enter) {
+                            if (root.view[root.sel]) root.load(root.view[root.sel].name);
+                        } else if (e.key === Qt.Key_Delete) {
+                            if (root.view[root.sel]) root.burn(root.view[root.sel].name);
+                        } else if (e.key === Qt.Key_Escape) {
+                            root.drawer = false;
+                            ed.forceActiveFocus();
+                        } else if (e.key === Qt.Key_Tab || e.key === Qt.Key_Backtab) {
+                            input.forceActiveFocus();
+                        } else return;
+                        e.accepted = true;
+                    }
                 }
 
                 Lb {
@@ -373,7 +469,8 @@ PanelWindow {
                 }
             }
 
-            // строка истории: заголовок (первая строка файла) и время; текущая — белая пилюля
+            // строка истории: заголовок (первая строка файла) и время; текущая — белая пилюля,
+            // выбранная с клавиатуры — подсветка как при наведении
             component Note: Rectangle {
                 id: row
                 required property var modelData
@@ -382,7 +479,7 @@ PanelWindow {
                 width: rows.width
                 height: 72
                 radius: 20
-                color: row.on ? Theme.fg : hov.hovered ? Theme.s3 : "transparent"
+                color: row.on ? Theme.fg : (hov.hovered || root.sel === index) ? Theme.s3 : "transparent"
                 Behavior on color { ColorAnimation { duration: 120 } }
 
                 Column {
@@ -402,6 +499,22 @@ PanelWindow {
                 Row {
                     id: tail
                     anchors { right: parent.right; rightMargin: 16; verticalCenter: parent.verticalCenter }
+                    spacing: 6
+                    Rectangle {
+                        width: 30
+                        height: 30
+                        radius: 15
+                        visible: hov.hovered
+                        color: cp.hovered ? Theme.fg : row.on ? "transparent" : Theme.s1
+                        Icon {
+                            anchors.centerIn: parent
+                            text: "\u{F0C5}"
+                            font.pixelSize: 15
+                            color: cp.hovered ? Theme.ink : row.on ? Theme.ink : Theme.grey
+                        }
+                        TapHandler { id: cp; onTapped: root.copyNote(row.modelData.name) }
+                        HoverHandler { cursorShape: Qt.PointingHandCursor }
+                    }
                     Rectangle {
                         width: 30
                         height: 30
@@ -419,7 +532,7 @@ PanelWindow {
                     }
                 }
 
-                // открытие — только слева от крестика: иначе тап по × ещё и «открывал» заметку
+                // открытие — только слева от кнопок: иначе тап по × ещё и «открывал» заметку
                 // и закрывал историю, а удалённый файл подставлялся в редактор
                 Rectangle {
                     anchors { left: parent.left; top: parent.top; bottom: parent.bottom; right: tail.left }
@@ -433,11 +546,12 @@ PanelWindow {
             // хинты под карточкой — как у Win+V
             Row {
                 anchors { horizontalCenter: parent.horizontalCenter; top: parent.bottom; topMargin: 24 }
-                spacing: 30
+                spacing: 24
                 Lb { text: "ctrl+space new" }
+                Lb { text: "ctrl+h notes" }
                 Lb { text: "ctrl+s save" }
                 Lb { text: "esc close" }
-                Lb { text: "saved"; color: Theme.fg; opacity: root.flash }
+                Lb { text: root.flashText; color: Theme.fg; opacity: root.flash }
             }
         }
     }
