@@ -222,7 +222,8 @@ PanelWindow {
             onStreamFinished: {
                 ed.text = text;
                 root.loader = false;
-                ed.cursorPosition = ed.text.length;
+                ed.cursorPosition = 0;
+                flick.contentY = 0;
                 ed.forceActiveFocus();
             }
         }
@@ -397,49 +398,73 @@ PanelWindow {
                 }
             }
 
-            TextEdit {
-                id: ed
+            // прокрутка: TextEdit сам не листается — держим его в Flickable и держим каретку в кадре,
+            // колесо/тачпад листают заметку целиком
+            Flickable {
+                id: flick
                 anchors { fill: parent; leftMargin: 42; rightMargin: 42; topMargin: 114; bottomMargin: 64 }
-                focus: true
-                textFormat: TextEdit.PlainText
-                wrapMode: TextEdit.WrapAtWordBoundaryOrAnywhere
-                selectByMouse: true
-                persistentSelection: true
-                color: Theme.fg
-                selectionColor: Theme.s3
-                selectedTextColor: Theme.fg
-                font { family: Theme.ui; pixelSize: 23 }
-                cursorDelegate: Rectangle {
-                    width: 2
-                    color: Theme.accent
-                    visible: ed.activeFocus
-                    Timer {
-                        running: ed.activeFocus
-                        interval: 520
-                        repeat: true
-                        onRunningChanged: if (running) parent.opacity = 1
-                        onTriggered: parent.opacity = 1 - parent.opacity
+                contentWidth: width
+                contentHeight: ed.contentHeight
+                clip: true
+                boundsBehavior: Flickable.StopAtBounds
+
+                function ensureVisible() {
+                    const r = ed.positionToRectangle(ed.cursorPosition);
+                    const pad = 8;
+                    if (r.y < contentY + pad) contentY = Math.max(0, r.y - pad);
+                    else if (r.y + r.height > contentY + height - pad)
+                        contentY = Math.min(Math.max(0, contentHeight - height), r.y + r.height - height + pad);
+                }
+
+                TextEdit {
+                    id: ed
+                    width: flick.width
+                    height: Math.max(flick.height, ed.contentHeight)
+                    focus: true
+                    textFormat: TextEdit.PlainText
+                    wrapMode: TextEdit.WrapAtWordBoundaryOrAnywhere
+                    selectByMouse: true
+                    persistentSelection: true
+                    color: Theme.fg
+                    selectionColor: Theme.s3
+                    selectedTextColor: Theme.fg
+                    font { family: Theme.ui; pixelSize: 23 }
+                    cursorDelegate: Rectangle {
+                        width: 2
+                        color: Theme.accent
+                        visible: ed.activeFocus
+                        Timer {
+                            running: ed.activeFocus
+                            interval: 520
+                            repeat: true
+                            onRunningChanged: if (running) parent.opacity = 1
+                            onTriggered: parent.opacity = 1 - parent.opacity
+                        }
+                    }
+                    // клик по редактору — история закрывается и фокус возвращается к тексту
+                    onActiveFocusChanged: if (activeFocus && root.drawer) root.drawer = false
+                    onCursorPositionChanged: flick.ensureVisible()
+                    Keys.onPressed: e => {
+                        const ctrl = (e.modifiers & Qt.ControlModifier) !== 0;
+                        if (e.key === Qt.Key_Escape) {
+                            if (root.drawer) root.drawer = false;
+                            else root.close();
+                        } else if (ctrl && e.key === Qt.Key_Space) {
+                            root.fresh();
+                        } else if (ctrl && e.key === Qt.Key_S) {
+                            root.saveNow();
+                        } else if (ctrl && e.key === Qt.Key_H) {
+                            root.history();
+                        } else if (e.key === Qt.Key_Tab) {
+                            ed.insert(ed.cursorPosition, "    ");
+                        } else return;
+                        e.accepted = true;
+                    }
+                    onTextChanged: {
+                        if (!root.loader) autosave.restart();
+                        flick.ensureVisible();
                     }
                 }
-                // клик по редактору — история закрывается и фокус возвращается к тексту
-                onActiveFocusChanged: if (activeFocus && root.drawer) root.drawer = false
-                Keys.onPressed: e => {
-                    const ctrl = (e.modifiers & Qt.ControlModifier) !== 0;
-                    if (e.key === Qt.Key_Escape) {
-                        if (root.drawer) root.drawer = false;
-                        else root.close();
-                    } else if (ctrl && e.key === Qt.Key_Space) {
-                        root.fresh();
-                    } else if (ctrl && e.key === Qt.Key_S) {
-                        root.saveNow();
-                    } else if (ctrl && e.key === Qt.Key_H) {
-                        root.history();
-                    } else if (e.key === Qt.Key_Tab) {
-                        ed.insert(ed.cursorPosition, "    ");
-                    } else return;
-                    e.accepted = true;
-                }
-                onTextChanged: if (!root.loader) autosave.restart()
             }
 
             Text {
@@ -597,6 +622,15 @@ PanelWindow {
                 }
 
                 HoverHandler { id: hov; cursorShape: Qt.PointingHandCursor }
+            }
+
+            // средняя кнопка не вставляет primary-выделение: Qt так умеет (QTextControl),
+            // но в быстром блокноте это случайная вставка чужого текста.
+            // Пустой Item, а не MouseArea: MouseArea навязывает курсор-стрелку над текстом
+            Item {
+                anchors.fill: parent
+                z: 10
+                TapHandler { acceptedButtons: Qt.MiddleButton }
             }
 
             // хинты под карточкой — как у Win+V
