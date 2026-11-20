@@ -72,11 +72,23 @@ PanelWindow {
         }
         if (ed.text === savedText) return;
         if (cur === "") cur = dir + "/" + Qt.formatDateTime(new Date(), "yyyy-MM-dd_HH-mm-ss-zzz") + ".md";
-        if (save.running) { save.again = true; return; }
-        // путь и текст фиксируем в процессе: переключение заметки во время записи их уже не подменит
-        save.path = cur;
-        save.payload = ed.text;
-        save.command = ["sh", "-c", 'd=$(dirname -- "$1"); mkdir -p -- "$d" && cat > "$1.tmp.$$" && mv -f -- "$1.tmp.$$" "$1"', "sh", save.path];
+        if (save.running) {
+            // уже пишется этот же текст — второй раз незачем
+            if (save.path === cur && save.payload === ed.text) return;
+            // иначе откладываем: досылка идёт по своим path/text, её не остановит ни loader, ни смена cur
+            save.nextPath = cur;
+            save.nextText = ed.text;
+            save.again = true;
+            return;
+        }
+        launchSave(cur, ed.text);
+    }
+
+    // путь и текст фиксируем в процессе: переключение заметки во время записи их уже не подменит
+    function launchSave(path, text) {
+        save.path = path;
+        save.payload = text;
+        save.command = ["sh", "-c", 'd=$(dirname -- "$1"); mkdir -p -- "$d" && cat > "$1.tmp.$$" && mv -f -- "$1.tmp.$$" "$1"', "sh", path];
         save.stdinEnabled = true;
         save.running = true;
     }
@@ -115,6 +127,7 @@ PanelWindow {
     function burn(name) {
         if (dir + "/" + name === cur) {
             cur = "";
+            savedText = "";
             loader = true;
             ed.text = "";
             loader = false;
@@ -244,6 +257,8 @@ PanelWindow {
         property string path: ""
         property string payload: ""
         property bool again: false
+        property string nextPath: ""
+        property string nextText: ""
         onStarted: { write(payload); stdinEnabled = false; }
         onExited: code => {
             // запись для заметки, которая всё ещё открыта: отмечаем, что буфер чист (dirty-флаг)
@@ -252,7 +267,11 @@ PanelWindow {
                 root.blink();
                 root.refresh();
             }
-            if (again) { again = false; root.saveNow(); }
+            // досылаем отложенное по зафиксированным path/text: даже если уже открыта другая заметка
+            if (again) {
+                again = false;
+                if (nextPath !== "") root.launchSave(nextPath, nextText);
+            }
         }
     }
 
