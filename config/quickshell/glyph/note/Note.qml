@@ -314,7 +314,8 @@ PanelWindow {
         Rectangle {
             id: card
             x: (stage.width - width) / 2
-            y: 140 + 24 * (1 - root.t)
+            // по центру экрана с учётом хинтов под карточкой; при закрытии — на 24 px ниже (выезд)
+            y: (stage.height - height - 40) / 2 + 24 * (1 - root.t)
             width: 1008
             height: Math.min(stage.height - 280, 684)
             opacity: root.t
