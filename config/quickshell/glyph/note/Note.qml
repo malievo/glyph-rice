@@ -501,7 +501,10 @@ PanelWindow {
                 width: rows.width
                 height: 72
                 radius: 20
-                color: row.on ? Theme.fg : (hov.hovered || root.sel === index) ? Theme.s3 : "transparent"
+                // base не «transparent»: тот чёрный с нулевой альфой, и анимация к серому на полпути
+                // давала тёмную вспышку при наведении (особенно в светлой теме)
+                color: row.on ? Theme.fg : (hov.hovered || root.sel === index) ? Theme.s3
+                    : Qt.rgba(Theme.s3.r, Theme.s3.g, Theme.s3.b, 0)
                 Behavior on color { ColorAnimation { duration: 120 } }
 
                 Column {
