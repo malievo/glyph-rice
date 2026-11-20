@@ -59,13 +59,15 @@ PanelWindow {
         else { drawer = true; input.forceActiveFocus(); }
     }
 
-    // атомарно, текст — в stdin: ни argv, ни кавычек; новое имя — дата
+    // атомарно, текст — в stdin: ни argv, ни кавычек; новое имя — дата.
+    // стёртая до пустого заметка — не заметка: в корзину, иначе в истории висят строки «empty note»
     function saveNow() {
         if (loader || !booted) return;
-        if (cur === "") {
-            if (ed.text.length === 0) return;
-            cur = dir + "/" + Qt.formatDateTime(new Date(), "yyyy-MM-dd_HH-mm-ss") + ".md";
+        if (ed.text.trim().length === 0) {
+            if (cur !== "") { trashFile(cur); cur = ""; }
+            return;
         }
+        if (cur === "") cur = dir + "/" + Qt.formatDateTime(new Date(), "yyyy-MM-dd_HH-mm-ss") + ".md";
         if (save.running) { save.again = true; return; }
         save.payload = ed.text;
         save.stdinEnabled = true;
@@ -94,6 +96,14 @@ PanelWindow {
     }
 
     // удаление в корзину: gio trash (файл можно вернуть из файлового менеджера), без gio — в ~/.local/share/Trash/files
+    function trashFile(path) {
+        rm.command = ["sh", "-c",
+            'if command -v gio >/dev/null 2>&1; then gio trash -- "$1" 2>/dev/null; else ' +
+            'd="$HOME/.local/share/Trash/files"; mkdir -p -- "$d" && mv -f -- "$1" "$d/"; fi',
+            "sh", path];
+        rm.running = true;
+    }
+
     function burn(name) {
         if (dir + "/" + name === cur) {
             cur = "";
@@ -101,11 +111,7 @@ PanelWindow {
             ed.text = "";
             loader = false;
         }
-        rm.command = ["sh", "-c",
-            'if command -v gio >/dev/null 2>&1; then gio trash -- "$1" 2>/dev/null; else ' +
-            'd="$HOME/.local/share/Trash/files"; mkdir -p -- "$d" && mv -f -- "$1" "$d/"; fi',
-            "sh", dir + "/" + name];
-        rm.running = true;
+        trashFile(dir + "/" + name);
     }
 
     // из строки истории, не открывая: текущая — из буфера редактора (там может быть ещё не сохранённое)
@@ -172,9 +178,9 @@ PanelWindow {
         id: lister
         command: ["sh", "-c",
             'd="$1"; mkdir -p -- "$d" || exit 0; cd "$d" || exit 0; ' +
-            'find . -maxdepth 1 -type f -name "*.md" -printf "%T@\\t%P\\n" 2>/dev/null | sort -rn | ' +
+            'find . -maxdepth 1 -type f -name "*.md" -size +0 -printf "%T@\\t%P\\n" 2>/dev/null | sort -rn | ' +
             'while IFS=$(printf "\\t") read -r ts f; do [ -n "$f" ] || continue; ' +
-            't=$(head -n 1 -- "$f" 2>/dev/null | tr "\\t\\n" "  " | cut -c 1-90); ' +
+            't=$(awk "NF { print; exit }" "./$f" 2>/dev/null | tr "\\t\\n" "  " | cut -c 1-90); ' +
             'printf "%s\\t%s\\t%s\\n" "$ts" "$f" "$t"; done',
             "sh", root.dir]
         stdout: StdioCollector {
@@ -182,7 +188,7 @@ PanelWindow {
                 root.notes = text.split("\n").filter(l => l.includes("\t")).map(l => {
                     const p = l.split("\t");
                     return { mtime: Number(p[0]), name: p[1], title: p[2] || "" };
-                });
+                }).filter(n => n.title !== ""); // пустые и без текста в историю не попадают
                 if (!root.booted) {
                     root.booted = true;
                     // не затираем то, что успели напечатать, пока читался список (после старта шелла)
@@ -539,9 +545,9 @@ PanelWindow {
                         width: parent.width
                         elide: Text.ElideRight
                         textFormat: Text.PlainText
-                        text: row.modelData.title || "empty note"
+                        text: row.modelData.title
                         font { family: Theme.ui; pixelSize: 16; weight: Font.Medium }
-                        color: row.on ? Theme.ink : row.modelData.title ? Theme.fg : Theme.mute
+                        color: row.on ? Theme.ink : Theme.fg
                     }
                     Lb { text: root.when(row.modelData.mtime); px: 10; color: row.on ? Theme.ink : Theme.grey; opacity: row.on ? 0.6 : 1 }
                 }
