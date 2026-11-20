@@ -26,6 +26,7 @@ PanelWindow {
     property string query: ""
     property int sel: 0         // выбранная строка истории (клавиатура и подсветка)
     property string cur: ""     // файл открытой заметки; пусто — новая, ещё не сохранённая
+    property string savedText: "" // текст, который уже в файле cur (dirty-флаг: писать только при изменениях)
     property bool loader: false // текст выставлен программно (загрузка) — автосейв молчит
     property bool booted: false
     property real flash: 0      // вспышка «saved» / «copied»
@@ -59,17 +60,23 @@ PanelWindow {
         else { drawer = true; input.forceActiveFocus(); }
     }
 
-    // атомарно, текст — в stdin: ни argv, ни кавычек; новое имя — дата.
-    // стёртая до пустого заметка — не заметка: в корзину, иначе в истории висят строки «empty note»
+    // атомарно, текст — в stdin: ни argv, ни кавычек; новое имя — дата с миллисекундами
+    // (две заметки в одну секунду иначе получили бы одно имя).
+    // стёртая до пустого заметка — не заметка: в корзину, иначе в истории висят строки «empty note».
+    // savedText — что уже лежит в файле: совпало, писать нечего, и просмотр не поднимает заметку в истории
     function saveNow() {
         if (loader || !booted) return;
         if (ed.text.trim().length === 0) {
-            if (cur !== "") { trashFile(cur); cur = ""; }
+            if (cur !== "") { trashFile(cur); cur = ""; savedText = ""; }
             return;
         }
-        if (cur === "") cur = dir + "/" + Qt.formatDateTime(new Date(), "yyyy-MM-dd_HH-mm-ss") + ".md";
+        if (ed.text === savedText) return;
+        if (cur === "") cur = dir + "/" + Qt.formatDateTime(new Date(), "yyyy-MM-dd_HH-mm-ss-zzz") + ".md";
         if (save.running) { save.again = true; return; }
+        // путь и текст фиксируем в процессе: переключение заметки во время записи их уже не подменит
+        save.path = cur;
         save.payload = ed.text;
+        save.command = ["sh", "-c", 'd=$(dirname -- "$1"); mkdir -p -- "$d" && cat > "$1.tmp.$$" && mv -f -- "$1.tmp.$$" "$1"', "sh", save.path];
         save.stdinEnabled = true;
         save.running = true;
     }
@@ -87,6 +94,7 @@ PanelWindow {
     function fresh() {
         saveNow();
         cur = "";
+        savedText = "";
         loader = true;
         ed.text = "";
         loader = false;
@@ -222,6 +230,7 @@ PanelWindow {
             onStreamFinished: {
                 ed.text = text;
                 root.loader = false;
+                root.savedText = ed.text;
                 ed.cursorPosition = 0;
                 flick.contentY = 0;
                 ed.forceActiveFocus();
@@ -232,12 +241,17 @@ PanelWindow {
     Process {
         id: save
         stdinEnabled: true
+        property string path: ""
         property string payload: ""
         property bool again: false
-        command: ["sh", "-c", 'd=$(dirname -- "$1"); mkdir -p -- "$d" && cat > "$1.tmp.$$" && mv -f -- "$1.tmp.$$" "$1"', "sh", root.cur]
         onStarted: { write(payload); stdinEnabled = false; }
         onExited: code => {
-            if (code === 0 && root.cur !== "") { root.blink(); root.refresh(); }
+            // запись для заметки, которая всё ещё открыта: отмечаем, что буфер чист (dirty-флаг)
+            if (code === 0 && path !== "" && path === root.cur) {
+                root.savedText = payload;
+                root.blink();
+                root.refresh();
+            }
             if (again) { again = false; root.saveNow(); }
         }
     }
