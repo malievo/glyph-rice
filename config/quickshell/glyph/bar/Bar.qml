@@ -149,8 +149,22 @@ PanelWindow {
     // спец-стол — оверлей над основным: резерв не должен переключаться при его открытии,
     // иначе work area меняется и окно основного стола дёргается
     readonly property bool keepSpace: !root.auto || !root.vert || root.floatingWin || !root.sideFree
-    readonly property bool wanted: !root.auto || (root.mode === "hidden" || !Sys.smartOK ? root.wins.length === 0
+    readonly property bool deskWanted: !root.auto || (root.mode === "hidden" || !Sys.smartOK ? root.wins.length === 0
         : !root.full && !root.wide && root.tiles.length <= 1)
+    // спец-стол живёт поверх основного: бар решает по его окнам, а не по столу под ним
+    readonly property var specialWins: root.isSpecial
+        ? Hyprland.toplevels.values.filter(t => t.workspace?.name === "special:" + root.specialWs) : []
+    readonly property var specialTiles: root.specialWins.filter(t => !(t.lastIpcObject?.floating ?? false))
+    readonly property bool specialWide: root.specialTiles.length === 1
+        && (root.normal[root.specialTiles[0].address] ?? root.geo[root.specialTiles[0].address] ?? root.specialTiles[0].lastIpcObject?.size?.[0] ?? 0)
+            >= 0.9 * (screen?.width ?? 1920) * (screen?.devicePixelRatio ?? 1)
+    readonly property bool specialFull: root.specialWins.some(t => (t.lastIpcObject?.fullscreen ?? 0) > 0)
+    readonly property bool specialWanted: !root.auto || (root.mode === "hidden" || !Sys.smartOK
+        ? root.specialWins.length === 0
+        : root.specialWins.length === 0 || (root.specialWins.length === 1 && root.specialTiles.length === 1 && !root.specialFull && !root.specialWide))
+    readonly property bool wanted: root.isSpecial ? root.specialWanted : root.deskWanted
+    // work area меняется только от основного стола: открытие/закрытие спец-стола её не трогает
+    readonly property bool reserve: root.deskWanted && root.keepSpace
     property bool hovered: false
     property bool peeking: false
     readonly property bool shown: root.wanted || root.peeking || Sys.deckKeyed || Sys.barMenu || root.powOpen
@@ -171,7 +185,7 @@ PanelWindow {
         Region { x: 0; y: 0; width: root.hitW; height: root.hitH1 }
         Region { x: 0; y: root.height - root.hitH2; width: root.hitW; height: root.hitH2 }
     }
-    exclusionMode: root.wanted && root.keepSpace ? ExclusionMode.Auto : ExclusionMode.Ignore
+    exclusionMode: root.reserve ? ExclusionMode.Auto : ExclusionMode.Ignore
     // бар занимает место по режиму — OSD встаёт под него; peek/панели сюда не входят
     function syncBarVisible() {
         const m = Object.assign({}, Sys.barVisible);
