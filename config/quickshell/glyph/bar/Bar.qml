@@ -146,7 +146,9 @@ PanelWindow {
         if (w <= 0) return false;
         return (root.screen.width - w / (root.screen.devicePixelRatio || 1)) / 2 >= root.width;
     }
-    readonly property bool keepSpace: !root.auto || !root.vert || root.isSpecial || root.floatingWin || !root.sideFree
+    // спец-стол — оверлей над основным: резерв не должен переключаться при его открытии,
+    // иначе work area меняется и окно основного стола дёргается
+    readonly property bool keepSpace: !root.auto || !root.vert || root.floatingWin || !root.sideFree
     readonly property bool wanted: !root.auto || (root.mode === "hidden" || !Sys.smartOK ? root.wins.length === 0
         : !root.full && !root.wide && root.tiles.length <= 1)
     property bool hovered: false
